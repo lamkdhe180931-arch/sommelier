@@ -1,0 +1,164 @@
+from __future__ import annotations
+
+import argparse
+import time
+from pathlib import Path
+from types import SimpleNamespace
+
+import stage_common
+
+
+DEFAULT_INITIAL_PROMPT = (
+    "Um. Uh. Ah. Like, you know. I mean, right. Actually. Basically. "
+    "Okay. Alright. Emm. Mm. So. Oh."
+)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Stage 04: run ASR on staged segments.")
+    parser.add_argument("--segments_json", required=True, help="Segments JSON from stage_03_overlap_separate.py.")
+    parser.add_argument("--audio", default="", help="Override audio path. Defaults to segments_json audio_path.")
+    parser.add_argument("--out", default="", help="Transcript JSON output path.")
+    parser.add_argument("--config_path", default="config.json")
+    parser.add_argument("--ASRMoE", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--whisperx_word_timestamps", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--initprompt", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--whisper_arch", default="large-v3")
+    parser.add_argument("--compute_type", default="float16")
+    parser.add_argument("--threads", type=int, default=4)
+    return parser.parse_args()
+
+
+def find_source_segment(result: dict, segments: list[dict], fallback_index: int) -> dict | None:
+    start = float(result.get("start", -1))
+    end = float(result.get("end", -1))
+    for segment in segments:
+        seg_start = float(segment.get("start", -1))
+        seg_end = float(segment.get("end", -1))
+        if start >= seg_start - 0.01 and end <= seg_end + 0.01:
+            return segment
+    if fallback_index < len(segments):
+        return segments[fallback_index]
+    return None
+
+
+def main() -> None:
+    args = parse_args()
+    segment_data = stage_common.load_json(args.segments_json)
+    audio_path = Path(args.audio or segment_data["audio_path"]).expanduser().resolve()
+    out_path = Path(args.out) if args.out else Path(args.segments_json).resolve().parent / "transcript.json"
+
+    import main_original_ASR_MoE as pipeline
+
+    cfg = pipeline.load_cfg(args.config_path)
+    logger = pipeline.Logger.get_logger()
+    pipeline.cfg = cfg
+    pipeline.logger = logger
+    pipeline.args = SimpleNamespace(
+        ASRMoE=args.ASRMoE,
+        whisperx_word_timestamps=args.whisperx_word_timestamps,
+    )
+
+    device_name = "cuda" if pipeline.torch.cuda.is_available() else "cpu"
+    device = pipeline.torch.device(device_name)
+    pipeline.device_name = device_name
+    pipeline.device = device
+    compute_type = args.compute_type if device_name == "cuda" else "int8"
+
+    sample_rate = int(segment_data.get("sample_rate") or cfg["entrypoint"]["SAMPLE_RATE"])
+    audio_info = stage_common.load_audio_info(audio_path, sample_rate)
+    segments = segment_data["segments"]
+
+    for segment in segments:
+        enhanced_path = segment.get("enhanced_audio_path")
+        if enhanced_path:
+            enhanced_audio, _ = stage_common.load_wav_mono(enhanced_path, target_sample_rate=sample_rate)
+            segment["enhanced_audio"] = enhanced_audio
+
+    asr_options = {}
+    if args.initprompt:
+        asr_options["initial_prompt"] = DEFAULT_INITIAL_PROMPT
+    if args.whisperx_word_timestamps:
+        asr_options["word_timestamps"] = True
+
+    pipeline.asr_model = pipeline.whisper_asr.load_asr_model(
+        args.whisper_arch,
+        device_name,
+        compute_type=compute_type,
+        threads=args.threads,
+        language="en",
+        asr_options=asr_options if asr_options else None,
+    )
+
+    if args.ASRMoE:
+        import nemo.collections.asr as nemo_asr
+
+        pipeline.asr_model_2 = nemo_asr.models.ASRModel.from_pretrained(
+            model_name="nvidia/parakeet-tdt-0.6b-v2"
+        )
+        pipeline.canary_model = pipeline.SALM.from_pretrained("nvidia/canary-qwen-2.5b")
+        pipeline.canary_model = pipeline.canary_model.to(device)
+        pipeline.canary_model.eval()
+
+    segment_demucs_flags = segment_data.get("segment_demucs_flags") or [False] * len(segments)
+    start_time = time.time()
+    if args.ASRMoE:
+        asr_result, whisper_time, alignment_time = pipeline.asr_MoE(
+            segments,
+            audio_info,
+            segment_demucs_flags=segment_demucs_flags,
+            enable_word_timestamps=args.whisperx_word_timestamps,
+            device=device_name,
+        )
+    else:
+        asr_result = pipeline.asr(segments, audio_info)
+        whisper_time = time.time() - start_time
+        alignment_time = 0.0
+    total_time = time.time() - start_time
+
+    clean_results = []
+    for idx, result in enumerate(asr_result):
+        clean_result = stage_common.clean_segment_for_json(result)
+        clean_result.setdefault("index", stage_common.normalized_index(idx))
+
+        source = find_source_segment(result, segments, idx)
+        if source is not None:
+            clean_result["source_index"] = source.get("index")
+            clean_result["source_start"] = source.get("start")
+            clean_result["source_end"] = source.get("end")
+            if source.get("enhanced_audio_path"):
+                clean_result["enhanced_audio_path"] = source["enhanced_audio_path"]
+                clean_result["is_separated"] = bool(source.get("is_separated"))
+            if "demucs" not in clean_result and idx < len(segment_demucs_flags):
+                clean_result["demucs"] = bool(segment_demucs_flags[idx])
+
+        clean_results.append(clean_result)
+
+    audio_duration = len(audio_info["waveform"]) / audio_info["sample_rate"]
+    stage_common.dump_json(
+        {
+            "audio_path": str(audio_path),
+            "source_audio_path": segment_data.get("source_audio_path") or str(audio_path),
+            "audio_name": segment_data.get("audio_name") or stage_common.audio_name_from_path(audio_path),
+            "sample_rate": audio_info["sample_rate"],
+            "audio_duration_seconds": audio_duration,
+            "segments": clean_results,
+            "metadata": {
+                "stage": "asr",
+                "asr_moe": bool(args.ASRMoE),
+                "whisper_arch": args.whisper_arch,
+                "processing_time_seconds": total_time,
+                "whisper_processing_time_seconds": whisper_time,
+                "whisper_rt_factor": whisper_time / audio_duration if audio_duration > 0 else 0,
+                "alignment_processing_time_seconds": alignment_time,
+                "word_timestamps_enabled": bool(args.whisperx_word_timestamps),
+                "device": device_name,
+            },
+        },
+        out_path,
+    )
+    print(f"Stage 04 complete: {out_path}")
+
+
+if __name__ == "__main__":
+    main()
