@@ -3,8 +3,24 @@
 # MIT
 import torch
 
-# Fix for PyTorch 2.6+ weights_only=True default breaking pyannote model loading
-# Patch lightning_fabric's _load function to use weights_only=False
+# =============================================================================
+# Tổng quan file
+# =============================================================================
+# File này là entrypoint chính của pipeline xử lý podcast/audio:
+# 1. Đọc cấu hình và tham số dòng lệnh.
+# 2. Chuẩn hoá audio đầu vào về mono WAV 24 kHz, 16-bit và mức âm lượng ổn định.
+# 3. Chạy diarization để tách đoạn nói theo người nói.
+# 4. Tuỳ chọn xoá nhạc nền bằng PANNs + Demucs.
+# 5. Tuỳ chọn tách giọng nói chồng nhau bằng SepReformer.
+# 6. Chạy ASR thường hoặc ASR MoE, sau đó xuất MP3 từng đoạn và JSON kết quả.
+#
+# Ghi chú quan trọng: các comment trong file giải thích "vì sao" từng bước tồn
+# tại và dữ liệu được chuyển qua pipeline như thế nào. Logic xử lý không nên đổi
+# khi chỉ chỉnh comment.
+
+# PyTorch 2.6+ đổi mặc định weights_only=True, có thể làm pyannote load model lỗi.
+# Đoạn patch này ép lightning_fabric dùng weights_only=False để giữ tương thích
+# với checkpoint pyannote cũ.
 import lightning_fabric.utilities.cloud_io as cloud_io
 from pathlib import Path
 from typing import Union, IO, Any
@@ -12,7 +28,7 @@ from typing import Union, IO, Any
 _original_load = cloud_io._load
 
 def _patched_load(path_or_url: Union[IO, str, Path], map_location=None) -> Any:
-    """Patched version of lightning_fabric's _load that uses weights_only=False for pyannote compatibility"""
+    """Phiên bản _load đã vá để pyannote đọc được checkpoint cần weights_only=False."""
     if not isinstance(path_or_url, (str, Path)):
         return torch.load(path_or_url, map_location=map_location, weights_only=False)
 
@@ -26,7 +42,11 @@ def _patched_load(path_or_url: Union[IO, str, Path], map_location=None) -> Any:
 
 cloud_io._load = _patched_load
 
-# Continue with other imports
+# =============================================================================
+# Import thư viện và module nội bộ
+# =============================================================================
+# Nhóm import bên dưới phục vụ toàn bộ pipeline: xử lý audio, diarization,
+# ASR, tách nguồn, gọi API phụ trợ và xuất kết quả.
 import argparse
 import json
 import librosa
@@ -80,13 +100,22 @@ from itertools import zip_longest
 
 warnings.filterwarnings("ignore")
 
+MIN_SPLIT_SILENCE=0.3
+
+
+
 
 def _apply_sortformer_segment_padding_from_args(
     df: pd.DataFrame, args, logger, audio_duration: float | None = None
 ) -> pd.DataFrame:
     """
-    Shift diarization segment boundaries (frame-level tweak) outside NeMo's internal post-processing.
-    When --sortformer-param is set, this ensures observable timing changes even if model cfg overrides are ignored.
+    Dịch nhẹ mốc bắt đầu/kết thúc của segment Sortformer sau khi model trả kết quả.
+
+    Mục đích:
+    - Một số cấu hình nội bộ của NeMo có thể không nhận override như mong muốn.
+    - Khi bật --sortformer-param, ta chỉnh trực tiếp DataFrame đầu ra để thay đổi
+      timing có hiệu lực rõ ràng.
+    - start/end luôn được clamp để không âm và không vượt quá thời lượng audio.
     """
     if df is None or df.empty:
         return df
@@ -109,29 +138,42 @@ def _apply_sortformer_segment_padding_from_args(
     df["end"] = df[["start", "end"]].max(axis=1)
 
     return df
+# =============================================================================
+# Hằng số dùng xuyên suốt pipeline
+# =============================================================================
 audio_count = 0
-# Limit diarization chunks to under 3 minutes, preferring VAD-detected silences as cut points.
-MAX_DIA_CHUNK_DURATION = 2 * 60  # 3 minutes
-MIN_SPLIT_SILENCE = 0.3  # seconds of silence required for splitting (more sensitive)
-MIN_EMBED_DURATION = 0.5  # seconds; skip embedding if audio is shorter
+
+# Giới hạn mỗi chunk diarization để tránh model xử lý audio quá dài một lần.
+# Ưu tiên cắt tại khoảng lặng do VAD tìm được để hạn chế cắt ngang câu nói.
+MAX_DIA_CHUNK_DURATION = 2 * 60  # giây; giữ dưới ngưỡng dài để Sortformer ổn định hơn
+MIN_SPLIT_SILENCE = 0.3  # giây im lặng tối thiểu để được chọn làm điểm cắt
+MIN_EMBED_DURATION = 0.5  # giây; segment ngắn hơn mức này sẽ bỏ qua embedding
 QWEN_3_OMNI_PORT = "11500"
 class RoverEnsembler:
     """
-    ROVER (Recognizer Output Voting Error Reduction) ensemble implementation.
-    Combines outputs from multiple ASR models to produce more accurate transcriptions.
+    Bộ ensemble ROVER (Recognizer Output Voting Error Reduction).
+
+    Ý tưởng:
+    - Nhận nhiều transcript từ các model ASR khác nhau như Whisper, Canary,
+      Parakeet.
+    - Căn chỉnh token giữa các transcript bằng Confusion Network.
+    - Bỏ bớt transcript quá lệch và vote từng vị trí token để tạo câu cuối.
     """
 
     @staticmethod
     def build_confusion_network(all_tokens: List[List[str]]) -> List[List[str]]:
         """
-        Build a Confusion Network from multiple token sequences.
-        Considers all sequences simultaneously to produce a unified alignment.
+        Tạo Confusion Network từ nhiều chuỗi token.
 
-        Args:
-            all_tokens: Token lists from all transcripts [[tok1, tok2, ...], ...]
+        Confusion Network là danh sách các "ô" theo vị trí. Mỗi ô chứa những
+        token ứng viên mà các model khác nhau dự đoán ở cùng một vị trí tương
+        đối. Cấu trúc này giúp vote dù mỗi model có thể thiếu/thừa token.
 
-        Returns:
-            List of candidate tokens per position [[cand1, cand2, ...], [cand1, cand2, ...], ...]
+        Tham số:
+            all_tokens: Danh sách token của từng transcript [[tok1, tok2, ...], ...]
+
+        Trả về:
+            Danh sách token ứng viên theo từng vị trí.
         """
         if not all_tokens:
             return []
@@ -139,14 +181,17 @@ class RoverEnsembler:
         if len(all_tokens) == 1:
             return [[tok] for tok in all_tokens[0]]
 
-        # Select the longest sequence as pivot (usually the most accurate)
+        # Chọn chuỗi dài nhất làm pivot để làm trục căn chỉnh.
+        # Với ASR, transcript quá ngắn thường bị mất từ, nên pivot dài hơn là
+        # lựa chọn thực dụng hơn.
         pivot_idx = max(range(len(all_tokens)), key=lambda i: len(all_tokens[i]))
         pivot = all_tokens[pivot_idx]
 
-        # Initialize confusion network: start each position with the pivot token
+        # Khởi tạo mỗi vị trí bằng token của pivot.
         confusion_net = [[pivot[i]] for i in range(len(pivot))]
 
-        # Align all other sequences to the pivot and add to the confusion network
+        # Căn chỉnh từng transcript còn lại với pivot rồi thêm token ứng viên vào
+        # vị trí tương ứng trong confusion network.
         for idx, tokens in enumerate(all_tokens):
             if idx == pivot_idx:
                 continue
@@ -155,41 +200,39 @@ class RoverEnsembler:
 
             for tag, i1, i2, j1, j2 in matcher.get_opcodes():
                 if tag == 'equal':
-                    # Match: add token at corresponding position
+                    # Khớp hoàn toàn: thêm token vào đúng vị trí của pivot.
                     for i, j in zip(range(i1, i2), range(j1, j2)):
                         if i < len(confusion_net):
                             confusion_net[i].append(tokens[j])
 
                 elif tag == 'replace':
-                    # Substitution: add corresponding candidate tokens at each pivot position
+                    # Khác nhau: phân bổ token ứng viên vào các vị trí pivot gần nhất.
                     pivot_len = i2 - i1
                     cand_len = j2 - j1
 
                     if pivot_len == cand_len:
-                        # 1:1 mapping
+                        # Hai phía dài bằng nhau nên map 1-1.
                         for i, j in zip(range(i1, i2), range(j1, j2)):
                             if i < len(confusion_net):
                                 confusion_net[i].append(tokens[j])
                     elif pivot_len > cand_len:
-                        # Pivot is longer: distribute candidates across positions
+                        # Pivot dài hơn: rải token ứng viên vào các vị trí pivot.
                         for i in range(i1, i2):
                             offset = (i - i1) * cand_len // pivot_len
                             if j1 + offset < j2 and i < len(confusion_net):
                                 confusion_net[i].append(tokens[j1 + offset])
                     else:
-                        # Candidate is longer: merge multiple candidates at pivot position
-                        # Add all candidates at the first pivot position
+                        # Chuỗi ứng viên dài hơn: gom nhiều token ứng viên vào vị trí pivot đầu.
                         if i1 < len(confusion_net):
                             for j in range(j1, j2):
                                 confusion_net[i1].append(tokens[j])
 
                 elif tag == 'delete':
-                    # Exists only in pivot: already in confusion_net (other sequences have empty values)
+                    # Chỉ pivot có token: đã nằm sẵn trong confusion_net nên không cần thêm.
                     pass
 
                 elif tag == 'insert':
-                    # Exists only in candidate: insert at the nearest pivot position
-                    # Add after the previous matching position
+                    # Chỉ candidate có token: gắn vào vị trí pivot gần nhất.
                     insert_pos = min(i1, len(confusion_net) - 1) if confusion_net else 0
                     if insert_pos >= 0 and insert_pos < len(confusion_net):
                         for j in range(j1, j2):
@@ -200,36 +243,39 @@ class RoverEnsembler:
     @staticmethod
     def has_local_repetition(output: List[str], word: str, window: int = 3) -> bool:
         """
-        Check if the same word is repeated within the recent window.
+        Kiểm tra một từ có bị lặp quá gần trong đoạn output vừa tạo hay không.
 
-        Args:
-            output: List of words output so far
-            word: Word to check
-            window: Window size to check
+        Hàm này giúp tránh lỗi ASR kiểu "hello hello hello" do model bị lặp token.
 
-        Returns:
-            True if repetition detected, False otherwise
+        Tham số:
+            output: Các từ đã được chọn trước đó.
+            word: Từ đang chuẩn bị thêm.
+            window: Số token gần nhất cần kiểm tra.
+
+        Trả về:
+            True nếu phát hiện lặp cục bộ, ngược lại False.
         """
         if len(output) < 1:
             return False
 
-        # Check the most recent 'window' words
+        # Chỉ nhìn vào vài từ gần nhất để không phạt các từ lặp hợp lý ở xa nhau.
         recent = output[-window:] if len(output) >= window else output
 
-        # Consider it a repetition if the same word has appeared 2 or more times
+        # Nếu cùng một từ đã xuất hiện từ 2 lần trở lên trong cửa sổ gần nhất,
+        # coi đó là dấu hiệu lặp bất thường.
         return recent.count(word) >= 2
 
     @staticmethod
     def calculate_transcript_similarity(t1_tokens: List[str], t2_tokens: List[str]) -> float:
         """
-        Calculate similarity between two transcripts (based on Jaccard similarity).
+        Tính độ tương đồng giữa hai transcript bằng Jaccard similarity.
 
-        Args:
-            t1_tokens: First transcript tokens
-            t2_tokens: Second transcript tokens
+        Tham số:
+            t1_tokens: Token của transcript thứ nhất.
+            t2_tokens: Token của transcript thứ hai.
 
-        Returns:
-            Similarity score between 0 and 1
+        Trả về:
+            Điểm tương đồng từ 0 đến 1.
         """
         if not t1_tokens or not t2_tokens:
             return 0.0
@@ -245,21 +291,25 @@ class RoverEnsembler:
     @staticmethod
     def align_and_vote(transcripts: List[str]) -> str:
         """
-        Align multiple transcription results using Confusion Network and perform improved voting.
-        - Unified alignment via Confusion Network
-        - Repetition pattern detection and filtering
-        - Similarity-based outlier downweighting
+        Căn chỉnh nhiều transcript rồi vote để tạo transcript cuối.
 
-        Args:
-            transcripts: List of transcription results from ASR models (e.g., [whisper, canary, parakeet])
+        Quy trình:
+        - Bỏ transcript rỗng.
+        - Tokenize theo khoảng trắng.
+        - Tính độ tương đồng để phát hiện transcript quá lệch.
+        - Tạo Confusion Network.
+        - Vote từng vị trí, đồng thời tránh lặp token cục bộ.
 
-        Returns:
-            Final ensembled transcription result
+        Tham số:
+            transcripts: Kết quả từ nhiều model ASR, ví dụ [whisper, canary, parakeet].
+
+        Trả về:
+            Transcript cuối sau ensemble.
         """
         if not transcripts:
             return ""
 
-        # Remove empty strings
+        # Loại bỏ transcript rỗng để không làm nhiễu bước vote.
         transcripts = [t.strip() for t in transcripts if t and t.strip()]
         if not transcripts:
             return ""
@@ -267,10 +317,11 @@ class RoverEnsembler:
         if len(transcripts) == 1:
             return transcripts[0]
 
-        # Tokenize by word
+        # Tách token đơn giản theo khoảng trắng; đủ dùng cho vote ở mức từ.
         all_tokens = [t.split() for t in transcripts]
 
-        # Calculate similarity between transcripts to detect outliers
+        # Tính độ giống nhau giữa từng transcript với phần còn lại để phát hiện
+        # model nào đang trả kết quả quá lệch.
         similarities = []
         for i in range(len(all_tokens)):
             sim_scores = []
@@ -281,62 +332,59 @@ class RoverEnsembler:
             avg_sim = sum(sim_scores) / len(sim_scores) if sim_scores else 0.0
             similarities.append(avg_sim)
 
-        # Reduce trust for transcripts with too low average similarity
-        # Threshold: consider as outlier if average similarity is below 0.3
+        # Bản chép lời có độ tương đồng trung bình thấp hơn ngưỡng sẽ bị giảm tin cậy.
         outlier_threshold = 0.3
         trusted_indices = [i for i, sim in enumerate(similarities) if sim >= outlier_threshold]
 
-        # If all transcripts are outliers, use only the ones with highest similarity
+        # Nếu tất cả đều bị coi là outlier, giữ lại hai transcript "ít lệch nhất"
+        # để pipeline vẫn có dữ liệu vote thay vì trả rỗng.
         if len(trusted_indices) == 0:
             trusted_indices = [i for i, _ in sorted(enumerate(similarities), key=lambda x: x[1], reverse=True)[:2]]
 
-        # Build Confusion Network
+        # Căn chỉnh các token ứng viên theo vị trí tương đối.
         confusion_net = RoverEnsembler.build_confusion_network(all_tokens)
 
-        # Improved voting for each position
+        # Bỏ phiếu từng vị trí trong confusion network.
         final_output = []
         for pos_idx, candidates in enumerate(confusion_net):
             if not candidates:
                 continue
 
-            # Remove empty strings then vote
+            # Bỏ token rỗng trước khi đếm phiếu.
             valid_candidates = [c for c in candidates if c]
             if not valid_candidates:
                 continue
 
-            # Filter to only candidates from trusted transcripts
-            # (first in confusion_net is pivot, rest are in order)
+            # Ưu tiên token từ các transcript đáng tin cậy.
             trusted_candidates = []
             for i, cand in enumerate(valid_candidates):
-                # Estimate which transcript the i-th candidate came from
-                # (simply: pivot is always trusted, rest are in order)
+                # Ước lượng nguồn token theo thứ tự đã thêm vào confusion_net.
+                # Pivot luôn được giữ vì là trục căn chỉnh chính.
                 if i == 0 or (i - 1) in trusted_indices:
                     trusted_candidates.append(cand)
 
-            # If no trusted candidates, use original candidates
+            # Nếu không còn token tin cậy, quay về toàn bộ ứng viên để tránh mất chữ.
             if not trusted_candidates:
                 trusted_candidates = valid_candidates
 
-            # Select the word with the most votes
+            # Chọn từ có nhiều phiếu nhất.
             votes = collections.Counter(trusted_candidates)
             best_word, count = votes.most_common(1)[0]
 
-            # Repetition pattern check: skip if the same word was recently repeated
+            # Nếu từ thắng vote gây lặp cục bộ, thử lấy ứng viên đứng thứ hai.
             if RoverEnsembler.has_local_repetition(final_output, best_word):
-                # If repetition, select the next most frequent candidate
                 if len(votes) > 1:
                     best_word = votes.most_common(2)[1][0]
                 else:
-                    # No other candidates available, skip
+                    # Không có ứng viên thay thế nên bỏ qua token này.
                     continue
 
-            # Accept if majority vote, otherwise prioritize pivot
+            # Nếu đạt đa số thì nhận kết quả vote; nếu không, ưu tiên token pivot.
             if count >= len(trusted_candidates) / 2:
                 final_output.append(best_word)
             else:
-                # Prioritize pivot's token
                 pivot_word = candidates[0] if candidates[0] else best_word
-                # Check pivot for repetition too
+                # Pivot cũng phải qua kiểm tra lặp để tránh kéo lỗi vào output.
                 if RoverEnsembler.has_local_repetition(final_output, pivot_word):
                     if pivot_word != best_word:
                         final_output.append(best_word)
@@ -348,51 +396,53 @@ class RoverEnsembler:
 
 class RepetitionFilter:
     """
-    Filters low-quality transcriptions by detecting repeated n-grams.
-    Paper criterion: remove a sample if a 15-gram appears more than 5 times.
+    Bộ lọc transcript chất lượng thấp dựa trên n-gram bị lặp.
+
+    Tiêu chí đang dùng: nếu một cụm 15 từ xuất hiện quá 5 lần, transcript có khả
+    năng là lỗi hallucination/lặp của ASR và nên bị loại.
     """
 
     def __init__(self, use_mock_tokenizer=True):
         self.use_mock_tokenizer = use_mock_tokenizer
 
     def tokenize(self, text: str) -> List[str]:
-        """Simple whitespace-based tokenization (use SentencePiece in production)"""
+        """Tokenize đơn giản theo khoảng trắng; có thể thay bằng SentencePiece khi cần."""
         if self.use_mock_tokenizer:
             return text.split()
         else:
-            # Use SentencePiece for actual implementation
+            # Vị trí dự phòng nếu sau này muốn dùng tokenizer thật như SentencePiece.
             pass
 
     def filter(self, text: str) -> bool:
         """
-        Filtering criteria:
-        1. Remove empty text
-        2. Remove if a 15-gram appears more than 5 times
+        Điều kiện lọc:
+        1. Loại transcript rỗng.
+        2. Loại transcript có 15-gram lặp quá nhiều lần.
 
-        Returns:
-            bool: True to keep, False to remove
+        Trả về:
+            True nếu giữ lại, False nếu loại bỏ.
         """
-        # Empty text check
+        # Bản chép lời rỗng không có giá trị huấn luyện/đánh giá.
         if not text or not text.strip():
             logger.debug(f"[RepetitionFilter] Empty text detected.")
             return False
 
         tokens = self.tokenize(text)
 
-        # 15-gram repetition check
+        # Kiểm tra lặp cụm dài 15 token.
         N = 15
         THRESHOLD = 5
 
         if len(tokens) < N:
-            return True  # Short text passes through
+            return True  # Bản chép lời ngắn hơn 15 token thì không đủ điều kiện kiểm tra.
 
-        # Generate n-grams
+        # Sinh toàn bộ 15-gram liên tiếp.
         ngrams = [tuple(tokens[i:i+N]) for i in range(len(tokens) - N + 1)]
 
-        # Calculate frequency counts
+        # Đếm tần suất từng cụm.
         counts = collections.Counter(ngrams)
 
-        # Check for more than 5 occurrences
+        # Nếu một cụm xuất hiện quá ngưỡng, coi là lỗi lặp.
         for ngram, count in counts.items():
             if count > THRESHOLD:
                 logger.debug(f"[RepetitionFilter] Repetition detected! Span '{' '.join(ngram[:3])}...' occurs {count} times.")
@@ -407,13 +457,22 @@ from pathlib import Path
 import subprocess
 import os
 
-# Replace the corresponding function in main_original_ASR_MoE.py with the code below.
+# =============================================================================
+# Chuyển đổi OPUS/OGG sang WAV
+# =============================================================================
+# Một số thư viện downstream đọc OPUS/OGG không ổn định. Vì vậy pipeline đổi các
+# file này sang WAV trước khi xử lý. Bản cached dùng cho tiền xử lý hàng loạt,
+# bản temporary dùng khi xử lý một file lẻ.
 
 def convert_opus_to_wav_cached(audio_path: str, target_sr: int, cache_dir: str, logger, ffmpeg_threads: int = 1):
     """
-    Convert .opus/.ogg to wav and cache in cache_dir.
-    Reuse cached wav if it exists and is newer than the input.
-    [Fixed] Sanitize filenames to prevent errors from special characters.
+    Chuyển .opus/.ogg sang .wav và lưu vào cache_dir.
+
+    Cách hoạt động:
+    - Nếu file không phải OPUS/OGG thì trả về path gốc.
+    - Tên file cache gồm stem đã sanitize + hash theo path, mtime, size để tránh
+      đụng tên giữa các file khác nhau.
+    - Nếu file WAV cache đã tồn tại thì dùng lại, không decode lại.
     """
     lower = audio_path.lower()
     if not (lower.endswith(".opus") or lower.endswith(".ogg")):
@@ -423,18 +482,19 @@ def convert_opus_to_wav_cached(audio_path: str, target_sr: int, cache_dir: str, 
 
     p = Path(audio_path)
     
-    # Collision prevention: hash based on (path + mtime + size)
+    # Băm theo path + thời gian sửa + dung lượng để tránh trùng cache khi hai
+    # file có cùng tên nhưng nội dung khác nhau.
     key = f"{str(p.resolve())}|{p.stat().st_mtime}|{p.stat().st_size}"
     h = hashlib.md5(key.encode("utf-8")).hexdigest()[:16]
     
-    # [Important fix] Replace all characters except alphanumeric, -, _, . with _ in the original filename (p.stem)
-    # e.g.: "![CDATA[Title]]" -> "__CDATA_Title__"
+    # Chuẩn hoá tên file: thay mọi ký tự không an toàn bằng "_".
+    # Ví dụ: "![CDATA[Title]]" -> "__CDATA_Title__".
     safe_stem = re.sub(r'[^\w\-\.]', '_', p.stem)
     
-    # Generate safe filename
+    # Tạo tên file cache an toàn cho filesystem.
     out_wav = os.path.join(cache_dir, f"{safe_stem}.{h}.wav")
 
-    # Return on cache hit
+    # Nếu cache đã có sẵn thì trả về ngay.
     if os.path.exists(out_wav):
         return out_wav
 
@@ -448,7 +508,7 @@ def convert_opus_to_wav_cached(audio_path: str, target_sr: int, cache_dir: str, 
         out_wav,
     ]
 
-    # Log source -> destination conversion paths
+    # Ghi log rõ nguồn và đích để dễ trace lỗi decode.
     logger.info(f"[OPUS][CACHE] Converting...\n  Src: {audio_path}\n  Dst: {out_wav}")
     
     proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -460,8 +520,12 @@ def convert_opus_to_wav_cached(audio_path: str, target_sr: int, cache_dir: str, 
 
 def convert_opus_to_wav_if_needed(audio_path: str, target_sr: int, logger):
     """
-    If input is .opus (or .ogg), convert to a temporary wav file and return the new path.
-    Returns: (processing_path, temp_dir_or_None)
+    Nếu input là .opus/.ogg thì đổi sang WAV tạm để xử lý.
+
+    Trả về:
+        (processing_path, temp_dir_or_None)
+        - processing_path: path WAV tạm hoặc path gốc nếu không cần đổi.
+        - temp_dir_or_None: thư mục tạm cần xoá sau khi xử lý xong.
     """
     lower = audio_path.lower()
     if not (lower.endswith(".opus") or lower.endswith(".ogg")):
@@ -470,7 +534,7 @@ def convert_opus_to_wav_if_needed(audio_path: str, target_sr: int, logger):
     temp_dir = tempfile.mkdtemp(prefix="opus2wav_")
     out_wav = os.path.join(temp_dir, "converted.wav")
 
-    # Prefer ffmpeg for robust opus decode
+    # Ưu tiên ffmpeg vì decode OPUS/OGG ổn định hơn pydub trong nhiều môi trường.
     cmd = [
         "ffmpeg", "-y",
         "-i", audio_path,
@@ -488,7 +552,8 @@ def convert_opus_to_wav_if_needed(audio_path: str, target_sr: int, logger):
             raise RuntimeError("ffmpeg opus->wav conversion failed")
         return out_wav, temp_dir
     except Exception as e:
-        # As a fallback, try pydub (still requires ffmpeg underneath in most envs)
+        # Dự phòng sang pydub nếu gọi ffmpeg trực tiếp lỗi. Lưu ý pydub thường
+        # vẫn cần ffmpeg bên dưới.
         logger.warning(f"[OPUS] ffmpeg path failed, trying pydub fallback: {e}")
         try:
             seg = AudioSegment.from_file(audio_path)
@@ -499,28 +564,29 @@ def convert_opus_to_wav_if_needed(audio_path: str, target_sr: int, logger):
             return out_wav, temp_dir
         except Exception as e2:
             logger.error(f"[OPUS] pydub fallback also failed: {e2}")
-            # cleanup
+            # Dọn thư mục tạm nếu cả ffmpeg và pydub đều lỗi.
             shutil.rmtree(temp_dir, ignore_errors=True)
             raise
 
 @time_logger
 def standardization(audio):
     """
-    Preprocess the audio file, including setting sample rate, bit depth, channels, and volume normalization.
+    Chuẩn hoá audio đầu vào trước khi đưa vào diarization/ASR.
 
-    Args:
-        audio (str or AudioSegment): Audio file path or AudioSegment object, the audio to be preprocessed.
+    Tham số:
+        audio (str or AudioSegment): Path file audio hoặc AudioSegment đã load.
 
-    Returns:
-        dict: A dictionary containing the preprocessed audio waveform, audio file name, and sample rate, formatted as:
+    Trả về:
+        dict chứa waveform đã chuẩn hoá, tên audio, sample rate và AudioSegment:
               {
-                  "waveform": np.ndarray, the preprocessed audio waveform, dtype is np.float32, shape is (num_samples,)
-                  "name": str, the audio file name
-                  "sample_rate": int, the audio sample rate
+                  "waveform": np.ndarray float32 dạng mono,
+                  "name": str,
+                  "sample_rate": int,
+                  "audio_segment": AudioSegment đã chuẩn hoá
               }
 
-    Raises:
-        ValueError: If the audio parameter is neither a str nor an AudioSegment.
+    Ngoại lệ:
+        ValueError: Nếu audio không phải path hoặc AudioSegment.
     """
     global audio_count
     name = "audio"
@@ -536,31 +602,31 @@ def standardization(audio):
 
     logger.debug("Entering the preprocessing of audio")
 
-    # Convert the audio file to WAV format
+    # Quy đổi về chuẩn chung của pipeline: sample rate cấu hình, 16-bit, mono.
     audio = audio.set_frame_rate(cfg["entrypoint"]["SAMPLE_RATE"])
-    audio = audio.set_sample_width(2)  # Set bit depth to 16bit
-    audio = audio.set_channels(1)  # Set to mono
+    audio = audio.set_sample_width(2)  # 16-bit PCM
+    audio = audio.set_channels(1)  # mono
 
     logger.debug("Audio file converted to WAV format")
 
-    # Calculate the gain to be applied
+    # Tính gain cần áp dụng để kéo âm lượng về mức mục tiêu.
     target_dBFS = -20
     gain = target_dBFS - audio.dBFS
     logger.info(f"Calculating the gain needed for the audio: {gain} dB")
 
-    # Normalize volume and limit gain range to between -3 and 3
+    # Giới hạn gain trong [-3, 3] dB để tránh tăng/giảm âm lượng quá mạnh.
     normalized_audio = audio.apply_gain(min(max(gain, -3), 3))
 
     waveform = np.array(normalized_audio.get_array_of_samples(), dtype=np.float32)
 
-    # Ensure waveform is 1D (mono)
+    # Bảo đảm waveform là 1 chiều vì các bước sau kỳ vọng mono.
     if waveform.ndim > 1:
         logger.warning(f"Waveform has {waveform.ndim} dimensions with shape {waveform.shape}, converting to mono")
         waveform = waveform.flatten()
 
     max_amplitude = np.max(np.abs(waveform))
     if max_amplitude > 0:
-        waveform /= max_amplitude  # Normalize
+        waveform /= max_amplitude  # Đưa biên độ về khoảng [-1, 1].
     else:
         logger.warning("Audio has zero amplitude, skipping normalization")
 
@@ -575,19 +641,21 @@ def standardization(audio):
     }
 
 
-# Step 2: Speaker Diarization
+# =============================================================================
+# Phát hiện và xử lý nhạc nền
+# =============================================================================
 @time_logger
 def detect_background_music(audio, panns_model, threshold=0.3):
     """
-    Detect background music using PANNs.
+    Phát hiện nhạc nền trên toàn bộ audio bằng PANNs.
 
-    Args:
-        audio (dict): A dictionary containing the audio waveform and sample rate.
-        panns_model (AudioTagging): Loaded PANNs model instance.
-        threshold (float): Music probability threshold. Background music is detected if above this value.
+    Tham số:
+        audio: dict có waveform và sample_rate.
+        panns_model: model PANNs đã load.
+        threshold: ngưỡng xác suất để coi là có nhạc nền.
 
-    Returns:
-        tuple: (has_music: bool, music_prob: float)
+    Trả về:
+        (has_music, music_prob)
     """
     if panns_model is None:
         logger.warning("PANNs model is not loaded, skipping music detection")
@@ -595,7 +663,7 @@ def detect_background_music(audio, panns_model, threshold=0.3):
 
     logger.debug("Detecting background music using PANNs")
 
-    # PANNs expects 32kHz audio, so resample
+    # PANNs kỳ vọng audio 32 kHz nên cần resample trước khi inference.
     waveform = audio["waveform"]
     sample_rate = audio["sample_rate"]
 
@@ -604,13 +672,13 @@ def detect_background_music(audio, panns_model, threshold=0.3):
     else:
         waveform_32k = waveform
 
-    # PANNs inference (model is already loaded)
+    # Chạy inference PANNs; model đã được load ở phần __main__.
     (clipwise_output, embedding) = panns_model.inference(waveform_32k[None, :])
 
-    # Get labels
+    # Lấy danh sách label AudioSet tương ứng với output.
     labels = panns_model.labels
 
-    # Find Music probability
+    # Tìm xác suất của label "Music".
     music_idx = labels.index('Music') if 'Music' in labels else None
     if music_idx is not None:
         music_prob = float(clipwise_output[0, music_idx])
@@ -624,41 +692,40 @@ def detect_background_music(audio, panns_model, threshold=0.3):
 
 def detect_segment_background_music(segment_audio, sample_rate, panns_model, threshold=0.3):
     """
-    Detect background music in a segment audio.
+    Phát hiện nhạc nền trong một segment audio.
 
-    Args:
-        segment_audio (np.ndarray): Segment audio waveform.
-        sample_rate (int): Sample rate.
-        panns_model (AudioTagging): Loaded PANNs model instance.
-        threshold (float): Music probability threshold.
+    Tham số:
+        segment_audio: waveform của segment.
+        sample_rate: sample rate của segment.
+        panns_model: model PANNs đã load.
+        threshold: ngưỡng xác suất Music.
 
-    Returns:
-        tuple: (has_music: bool, music_prob: float)
+    Trả về:
+        (has_music, music_prob)
     """
     if panns_model is None:
         logger.warning("PANNs model is not loaded, skipping music detection")
         return False, 0.0
 
-    # PANNs expects 32kHz audio, so resample
+    # PANNs cần 32 kHz.
     if sample_rate != 32000:
         waveform_32k = librosa.resample(segment_audio, orig_sr=sample_rate, target_sr=32000)
     else:
         waveform_32k = segment_audio
 
-    # Check minimum length required by PANNs model (about 1 second = 32000 samples)
-    # Minimum length is needed to pass through Cnn14 model's pooling layers
+    # Segment quá ngắn sẽ không đi qua được các lớp pooling của Cnn14.
     min_length = 32000  # 1 second at 32kHz
     if len(waveform_32k) < min_length:
         logger.warning(f"Segment too short for music detection ({len(waveform_32k)/32000:.2f}s < 1.0s), skipping music detection")
         return False, 0.0
 
-    # PANNs inference (model is already loaded)
+    # Chạy PANNs trên segment.
     (clipwise_output, embedding) = panns_model.inference(waveform_32k[None, :])
 
-    # Get labels
+    # Lấy label để tìm index "Music".
     labels = panns_model.labels
 
-    # Find Music probability
+    # Trích xác suất label Music.
     music_idx = labels.index('Music') if 'Music' in labels else None
     if music_idx is not None:
         music_prob = float(clipwise_output[0, music_idx])
@@ -670,8 +737,14 @@ def detect_segment_background_music(segment_audio, sample_rate, panns_model, thr
 
 def separate_full_vocals_demucs(full_audio: np.ndarray, sample_rate: int) -> np.ndarray | None:
     """
-    Run Demucs once on the entire audio to obtain a reusable vocal stem.
-    Returns the vocal waveform resampled to the original sample_rate.
+    Chạy Demucs một lần trên toàn bộ audio để lấy stem giọng nói.
+
+    Lý do chạy toàn file:
+    - Nếu từng segment đều gọi Demucs thì rất chậm.
+    - Stem vocals của toàn file có thể được cắt lại theo start/end của từng segment.
+
+    Trả về:
+        Waveform vocals ở sample_rate gốc, hoặc None nếu Demucs lỗi.
     """
     temp_dir = tempfile.mkdtemp(prefix="demucs_full_")
 
@@ -717,21 +790,23 @@ def separate_full_vocals_demucs(full_audio: np.ndarray, sample_rate: int) -> np.
 
 def remove_segment_background_music_demucs(segment_audio, sample_rate, full_vocals=None, start_frame=None, end_frame=None):
     """
-    Remove background music from segment audio using Demucs and extract vocals only.
-    If full_vocals is provided, slice from the precomputed stem.
+    Loại nhạc nền khỏi một segment bằng Demucs, chỉ giữ phần vocals.
 
-    Args:
-        segment_audio (np.ndarray): Segment audio waveform.
-        sample_rate (int): Sample rate.
-        full_vocals (np.ndarray | None): Vocal waveform pre-extracted from full audio using Demucs.
-        start_frame (int | None): Segment start frame (relative to full waveform).
-        end_frame (int | None): Segment end frame (relative to full waveform).
+    Nếu đã có full_vocals từ `separate_full_vocals_demucs`, hàm chỉ cắt đúng
+    vùng frame tương ứng. Nếu chưa có, hàm dự phòng sang chạy Demucs riêng cho
+    segment đó.
 
-    Returns:
-        np.ndarray: Vocal-only waveform, or original on failure.
+    Tham số:
+        segment_audio: waveform của segment cần xử lý.
+        sample_rate: sample rate hiện tại.
+        full_vocals: stem vocals đã tách từ toàn bộ audio, nếu có.
+        start_frame/end_frame: vị trí segment trong waveform gốc.
+
+    Trả về:
+        Waveform chỉ còn vocals; nếu lỗi thì trả lại segment_audio gốc.
     """
     if full_vocals is not None and start_frame is not None and end_frame is not None:
-        # Fast path: slice from pre-separated vocal track
+        # Đường nhanh: cắt trực tiếp từ stem vocals đã tách sẵn.
         start = max(0, int(start_frame))
         end = min(int(end_frame), len(full_vocals))
         if end <= start:
@@ -749,19 +824,19 @@ def remove_segment_background_music_demucs(segment_audio, sample_rate, full_voca
         padded[: len(vocal_slice)] = vocal_slice.astype(np.float32)
         return padded
 
-    # Create temporary directory for demucs output
+    # Đường chậm: tạo thư mục tạm để chạy Demucs riêng cho segment.
     temp_dir = tempfile.mkdtemp(prefix="demucs_seg_")
 
     try:
-        # Save segment audio to temporary file
+        # Lưu segment thành WAV tạm vì CLI Demucs nhận file path.
         temp_input = os.path.join(temp_dir, "segment.wav")
         sf.write(temp_input, segment_audio, sample_rate)
 
-        # Run demucs to separate vocals
+        # Gọi Demucs CLI để tách nguồn.
         import subprocess
         demucs_output_dir = os.path.join(temp_dir, "separated")
 
-        # Check if CUDA is available
+        # Dùng CUDA nếu có để tăng tốc.
         device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.debug(f"Running Demucs on device: {device}")
 
@@ -769,7 +844,7 @@ def remove_segment_background_music_demucs(segment_audio, sample_rate, full_voca
             sys.executable, "-m", "demucs.separate",
             "-n", "htdemucs",
             "--two-stems", "vocals",
-            "-d", device,  # Explicitly specify device (cuda or cpu)
+            "-d", device,  # Chỉ định rõ cuda/cpu cho Demucs.
             "-o", demucs_output_dir,
             temp_input
         ]
@@ -780,14 +855,14 @@ def remove_segment_background_music_demucs(segment_audio, sample_rate, full_voca
             logger.error(f"Demucs failed for segment: {result.stderr}")
             return segment_audio
 
-        # Load separated vocal track
+        # Demucs ghi kết quả vocals.wav theo cấu trúc thư mục cố định.
         vocal_path = os.path.join(demucs_output_dir, "htdemucs", "segment", "vocals.wav")
 
         if not os.path.exists(vocal_path):
             logger.error(f"Vocal track not found at {vocal_path}")
             return segment_audio
 
-        # Load vocal-only audio
+        # Nạp lại phần giọng nói bằng sample_rate gốc để thay thế vào waveform pipeline.
         vocal_waveform, _ = librosa.load(vocal_path, sr=sample_rate, mono=True)
         return vocal_waveform.astype(np.float32)
 
@@ -795,7 +870,7 @@ def remove_segment_background_music_demucs(segment_audio, sample_rate, full_voca
         logger.error(f"Error during segment Demucs processing: {e}")
         return segment_audio
     finally:
-        # Cleanup temporary directory
+        # Dọn thư mục tạm để không tích tụ file WAV lớn.
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -803,8 +878,15 @@ def remove_segment_background_music_demucs(segment_audio, sample_rate, full_voca
 @time_logger
 def preprocess_segments_with_demucs(segment_list, audio, panns_model=None, use_demucs=False, padding=0.5):
     """
-    Detect background music and apply Demucs per segment before ASR.
-    (Adds padding to account for ASR timestamp shifts)
+    Phát hiện nhạc nền từng segment và áp dụng Demucs trước ASR.
+
+    Chiến lược:
+    - Nếu --demucs tắt: giữ nguyên audio và trả flag False cho mọi segment.
+    - Nếu bật: dùng PANNs kiểm tra từng segment có padding.
+    - Khi segment có nhạc nền, ưu tiên chạy Demucs một lần trên toàn audio rồi
+      cắt stem vocals, tránh chạy Demucs lặp lại nhiều lần.
+    - Trả về audio đã thay waveform và danh sách flag đánh dấu segment nào đã
+      được xử lý bằng Demucs.
     """
     if not use_demucs:
         logger.info("Demucs preprocessing skipped (flag disabled)")
@@ -820,29 +902,29 @@ def preprocess_segments_with_demucs(segment_list, audio, panns_model=None, use_d
     full_demucs_attempted = False
 
     for idx, segment in enumerate(segment_list):
-        # Apply padding to cover ASR boundary shifts
+        # Thêm padding quanh segment để tránh bỏ sót nhạc nền sát biên timestamp.
         start_time = max(0, segment["start"] - padding)
-        end_time = segment["end"] + padding # Boundary overflow is handled automatically by slicing
+        end_time = segment["end"] + padding  # Phép cắt mảng bên dưới sẽ tự chặn vượt biên.
         
         start_frame = int(start_time * sample_rate)
         end_frame = int(end_time * sample_rate)
         
-        # Prevent exceeding total length
+        # Không cho end_frame vượt quá độ dài waveform.
         end_frame = min(end_frame, total_samples)
 
         segment_audio = waveform[start_frame:end_frame]
         
-        # Skip if segment is too short
-        if len(segment_audio) < 16000: # Less than 0.5 seconds
+        # Segment quá ngắn không đủ ổn định để PANNs/Demucs xử lý.
+        if len(segment_audio) < 16000:  # Ngắn hơn khoảng 0.5 giây.
             segment_demucs_flags.append(False)
             continue
 
-        # Detect background music (check the padded region)
+        # Kiểm tra nhạc nền trên vùng đã padding.
         has_music, music_prob = detect_segment_background_music(segment_audio, sample_rate, panns_model, threshold=0.3)
         
         if has_music:
             logger.info(f"Segment {idx} (with padding): Background music detected (prob={music_prob:.3f}), applying Demucs...")
-            # Apply demucs (prefer single full-audio stem to avoid per-segment overhead)
+            # Ưu tiên tách vocals toàn file một lần, rồi tái sử dụng cho các segment.
             if vocal_full is None and not full_demucs_attempted:
                 vocal_full = separate_full_vocals_demucs(waveform, sample_rate)
                 full_demucs_attempted = True
@@ -860,13 +942,13 @@ def preprocess_segments_with_demucs(segment_list, audio, panns_model=None, use_d
             else:
                 vocal_audio = remove_segment_background_music_demucs(segment_audio, sample_rate)
             
-            # Replace the segment in the waveform
-            # Adjust length since vocal_audio may differ from segment_audio
+            # Ghi vocals trở lại waveform đã chuẩn hoá. Cần khớp độ dài vì output
+            # Demucs có thể lệch vài sample so với input.
             target_length = len(segment_audio)
             if len(vocal_audio) >= target_length:
                 waveform[start_frame:end_frame] = vocal_audio[:target_length]
             else:
-                # Rare case: pad if vocal_audio is shorter
+                # Trường hợp hiếm: vocals ngắn hơn, chỉ thay phần có dữ liệu.
                 waveform[start_frame : start_frame + len(vocal_audio)] = vocal_audio
 
             segment_demucs_flags.append(True)
@@ -874,11 +956,11 @@ def preprocess_segments_with_demucs(segment_list, audio, panns_model=None, use_d
         else:
             segment_demucs_flags.append(False)
 
-    # Update audio dictionary with processed waveform
+    # Cập nhật dict audio để các bước sau dùng waveform đã xử lý nhạc nền.
     updated_audio = audio.copy()
     updated_audio["waveform"] = waveform
 
-    # Also update audio_segment for export
+    # Đồng bộ AudioSegment để phần export MP3 dùng đúng audio đã xử lý.
     from pydub import AudioSegment as PydubAudioSegment
     waveform_clipped = np.clip(waveform, -1.0, 1.0)
     waveform_int16 = (waveform_clipped * 32767).astype(np.int16)
@@ -897,13 +979,13 @@ def preprocess_segments_with_demucs(segment_list, audio, panns_model=None, use_d
 @time_logger
 def speaker_diarization(audio):
     """
-    Perform speaker diarization on the given audio.
+    Chạy speaker diarization bằng pyannote pipeline.
 
-    Args:
-        audio (dict): A dictionary containing the audio waveform and sample rate.
+    Tham số:
+        audio: dict chứa waveform và sample_rate.
 
-    Returns:
-        pd.DataFrame: A dataframe containing segments with speaker labels.
+    Trả về:
+        DataFrame gồm segment, label, speaker, start, end.
     """
     logger.debug(f"Start speaker diarization")
     logger.debug(f"audio waveform shape: {audio['waveform'].shape}")
@@ -935,17 +1017,22 @@ def speaker_diarization(audio):
 @time_logger
 def cut_by_speaker_label(vad_list):
     """
-    Merge and trim VAD segments by speaker labels, enforcing constraints on segment length and merge gaps.
+    Gộp/cắt segment theo speaker label để tạo các đoạn ASR hợp lý.
 
-    Args:
-        vad_list (list): List of VAD segments with start, end, and speaker labels.
+    Luật chính:
+    - Segment quá dài bị cắt nhỏ theo MAX_SEGMENT_LENGTH.
+    - Segment ngắn cùng speaker và sát nhau có thể được gộp theo MERGE_GAP.
+    - Segment quá ngắn sau khi xử lý sẽ bị loại.
 
-    Returns:
-        list: A list of updated VAD segments after merging and trimming.
+    Tham số:
+        vad_list: danh sách segment có start, end, speaker.
+
+    Trả về:
+        Danh sách segment đã gộp/cắt/lọc.
     """
-    MERGE_GAP = args.merge_gap  # merge gap in seconds, if smaller than this, merge
-    MIN_SEGMENT_LENGTH = 3  # min segment length in seconds
-    MAX_SEGMENT_LENGTH = 30  # max segment length in seconds
+    MERGE_GAP = args.merge_gap  # giây; nhỏ hơn ngưỡng này thì có thể gộp
+    MIN_SEGMENT_LENGTH = 3  # giây; đoạn ngắn hơn sẽ bị loại
+    MAX_SEGMENT_LENGTH = 30  # giây; đoạn dài hơn sẽ bị cắt nhỏ
 
     updated_list = []
 
@@ -961,11 +1048,11 @@ def cut_by_speaker_label(vad_list):
                 f"cut_by_speaker_label > segment longer than 30s, force trimming to 30s smaller segments"
             )
             while segment_end - current_start >= MAX_SEGMENT_LENGTH:
-                vad["end"] = current_start + MAX_SEGMENT_LENGTH  # update end time
+                vad["end"] = current_start + MAX_SEGMENT_LENGTH  # cập nhật end của chunk hiện tại
                 updated_list.append(vad)
                 vad = vad.copy()
                 current_start += MAX_SEGMENT_LENGTH
-                vad["start"] = current_start  # update start time
+                vad["start"] = current_start  # cập nhật start của chunk tiếp theo
                 vad["end"] = segment_end
             updated_list.append(vad)
             continue
@@ -984,7 +1071,7 @@ def cut_by_speaker_label(vad_list):
         ):
             updated_list.append(vad)
         else:
-            updated_list[-1]["end"] = vad["end"]  # merge the time
+            updated_list[-1]["end"] = vad["end"]  # gộp bằng cách kéo dài end time
 
     logger.debug(
         f"cut_by_speaker_label > merged {len(vad_list) - len(updated_list)} segments"
@@ -1003,19 +1090,18 @@ def cut_by_speaker_label(vad_list):
 @time_logger
 def detect_overlapping_segments(segment_list, overlap_threshold=0.2):
     """
-    Detect segments that overlap for more than overlap_threshold seconds.
+    Tìm các cặp segment bị chồng thời gian lớn hơn overlap_threshold.
 
-    Args:
-        segment_list (list): List of segments with 'start', 'end', and 'speaker' keys
-        overlap_threshold (float): Minimum overlap duration in seconds to be considered
+    Tham số:
+        segment_list: danh sách segment có start, end, speaker.
+        overlap_threshold: số giây chồng tối thiểu để coi là overlap cần xử lý.
 
-    Returns:
-        list: List of overlapping segment pairs with overlap info
-            [{'seg1': segment1, 'seg2': segment2, 'overlap_start': float, 'overlap_end': float, 'overlap_duration': float}]
+    Trả về:
+        Danh sách cặp overlap kèm overlap_start, overlap_end, overlap_duration.
     """
     overlapping_pairs = []
 
-    # Sort segments by start time
+    # Sort theo start để khi seg2 bắt đầu sau seg1.end thì có thể break sớm.
     sorted_segments = sorted(segment_list, key=lambda x: x['start'])
 
     for i in range(len(sorted_segments)):
@@ -1023,16 +1109,17 @@ def detect_overlapping_segments(segment_list, overlap_threshold=0.2):
             seg1 = sorted_segments[i]
             seg2 = sorted_segments[j]
 
-            # If seg2 starts after seg1 ends, no more overlaps possible for seg1
+            # Vì list đã sort, nếu seg2 bắt đầu sau seg1 kết thúc thì các seg sau
+            # cũng không thể overlap với seg1.
             if seg2['start'] >= seg1['end']:
                 break
 
-            # Calculate overlap
+            # Giao nhau của hai khoảng thời gian [start, end].
             overlap_start = max(seg1['start'], seg2['start'])
             overlap_end = min(seg1['end'], seg2['end'])
             overlap_duration = overlap_end - overlap_start
 
-            # Check if overlap exceeds threshold
+            # Chỉ giữ overlap đủ dài để đáng chạy SepReformer.
             if overlap_duration >= overlap_threshold:
                 overlapping_pairs.append({
                     'seg1': seg1,
@@ -1050,15 +1137,19 @@ def detect_overlapping_segments(segment_list, overlap_threshold=0.2):
 
 class SepReformerSeparator:
     """
-    Class to load the SepReformer model once and perform multiple inferences.
+    Lớp bao nạp SepReformer một lần và tái sử dụng cho nhiều segment overlap.
+
+    SepReformer có cấu trúc package riêng cũng tên `models`/`utils`, dễ đụng
+    module với repo hiện tại. Vì vậy phần __init__ tạm chỉnh sys.path và khôi
+    phục lại sau khi nạp model.
     """
     def __init__(self, sepreformer_path, device):
         """
-        Initialize and load the SepReformer model.
+        Khởi tạo model SepReformer và nạp checkpoint.
 
-        Args:
-            sepreformer_path: Path to SepReformer model directory
-            device: torch device (cuda/cpu)
+        Tham số:
+            sepreformer_path: đường dẫn thư mục SepReformer.
+            device: torch device (cuda/cpu).
         """
         import sys
         import yaml
@@ -1068,25 +1159,25 @@ class SepReformerSeparator:
 
         print(f"[SepReformer] Initializing on device: {self.device}")
 
-        # Store original sys.path to restore later
+        # Lưu sys.path gốc để sau khi import SepReformer sẽ trả môi trường về như cũ.
         original_sys_path = sys.path.copy()
 
         try:
-            # Save the current 'models' and 'utils' modules if they exist
+            # Ghi nhớ module `models`/`utils` hiện có của podcast-pipeline.
             original_models = sys.modules.get('models', None)
             original_utils = sys.modules.get('utils', None)
 
-            # Remove podcast-pipeline from sys.path temporarily
+            # Tạm bỏ path của podcast-pipeline để import đúng package của SepReformer.
             podcast_pipeline_path = os.path.dirname(os.path.abspath(__file__))
             paths_to_remove = [p for p in sys.path if podcast_pipeline_path in p]
             for path in paths_to_remove:
                 sys.path.remove(path)
 
-            # Add SepReformer to path
+            # Đưa SepReformer lên đầu sys.path để import model nội bộ của nó.
             if sepreformer_path not in sys.path:
                 sys.path.insert(0, sepreformer_path)
 
-            # Clear conflicting modules
+            # Xoá module conflict khỏi sys.modules để Python không reuse nhầm module cũ.
             modules_to_clear = [key for key in sys.modules.keys()
                               if key.startswith('models.') or key.startswith('utils.') or key in ['models', 'utils']]
             cleared_modules = {}
@@ -1094,24 +1185,24 @@ class SepReformerSeparator:
                 cleared_modules[module_name] = sys.modules[module_name]
                 del sys.modules[module_name]
 
-            # Import SepReformer's model
+            # Nạp class Model của SepReformer sau khi đã xử lý path/module conflict.
             from models.SepReformer_Base_WSJ0.model import Model
 
-            # Restore the original modules
+            # Khôi phục module cũ để các phần khác của pipeline không bị ảnh hưởng.
             for module_name, module_obj in cleared_modules.items():
                 sys.modules[module_name] = module_obj
 
-            # Load SepReformer config
+            # Đọc config YAML đi kèm checkpoint SepReformer.
             config_path = os.path.join(sepreformer_path, "models/SepReformer_Base_WSJ0/configs.yaml")
             with open(config_path, 'r') as f:
                 yaml_dict = yaml.safe_load(f)
             self.config = yaml_dict["config"]
 
-            # Load model
+            # Tạo kiến trúc model từ config.
             print("[SepReformer] Loading model...")
             self.model = Model(**self.config["model"])
 
-            # Load checkpoint
+            # Nạp checkpoint: ưu tiên pretrain_weights, dự phòng sang scratch_weights.
             checkpoint_dir = os.path.join(sepreformer_path, "models/SepReformer_Base_WSJ0/log/pretrain_weights")
             if not os.path.exists(checkpoint_dir) or not os.listdir(checkpoint_dir):
                 checkpoint_dir = os.path.join(sepreformer_path, "models/SepReformer_Base_WSJ0/log/scratch_weights")
@@ -1129,31 +1220,31 @@ class SepReformerSeparator:
             print("[SepReformer] Model initialization complete!")
 
         finally:
-            # Restore original sys.path
+            # Luôn trả sys.path về trạng thái ban đầu, kể cả khi load lỗi.
             sys.path = original_sys_path
 
     def separate(self, audio_segment, sample_rate):
         """
-        Perform audio separation.
+        Tách audio overlap thành hai nguồn giọng nói.
 
-        Args:
-            audio_segment (np.ndarray): Audio segment to separate
-            sample_rate (int): Audio sample rate
+        Tham số:
+            audio_segment: waveform vùng overlap.
+            sample_rate: sample rate hiện tại của waveform.
 
-        Returns:
-            tuple: (separated_audio_1, separated_audio_2) as numpy arrays
+        Trả về:
+            (separated_audio_1, separated_audio_2)
         """
         try:
-            # Resample to 8kHz if needed
+            # Model SepReformer này được train ở 8 kHz, nên phải resample trước.
             if sample_rate != 8000:
                 audio_8k = librosa.resample(audio_segment, orig_sr=sample_rate, target_sr=8000)
             else:
                 audio_8k = audio_segment
 
-            # Prepare tensor
+            # Chuẩn bị tensor batch size 1.
             mixture_tensor = torch.tensor(audio_8k, dtype=torch.float32).unsqueeze(0)
 
-            # Padding
+            # Pad để độ dài chia hết cho stride encoder, tránh lỗi shape khi inference.
             stride = self.config["model"]["module_audio_enc"]["stride"]
             remains = mixture_tensor.shape[-1] % stride
             if remains != 0:
@@ -1162,16 +1253,16 @@ class SepReformerSeparator:
             else:
                 mixture_padded = mixture_tensor
 
-            # Inference
+            # Chạy inference tách 2 source.
             with torch.inference_mode():
                 nnet_input = mixture_padded.to(self.device)
                 estim_src, _ = self.model(nnet_input)
 
-                # Extract separated sources
+                # Cắt bỏ phần padding và đưa về numpy.
                 src1 = estim_src[0][..., :mixture_tensor.shape[-1]].squeeze().cpu().numpy()
                 src2 = estim_src[1][..., :mixture_tensor.shape[-1]].squeeze().cpu().numpy()
 
-            # Resample back to original sample rate if needed
+            # Đưa source về sample_rate gốc để có thể chèn lại vào waveform pipeline.
             if sample_rate != 8000:
                 src1 = librosa.resample(src1, orig_sr=8000, target_sr=sample_rate)
                 src2 = librosa.resample(src2, orig_sr=8000, target_sr=sample_rate)
@@ -1188,27 +1279,26 @@ class SepReformerSeparator:
 @time_logger
 def identify_speaker_with_embedding(audio_segment, sample_rate, reference_embeddings, speaker_labels, embedding_model):
     """
-    Identify which speaker an audio segment belongs to using speaker embeddings.
+    Xác định source tách ra thuộc speaker nào bằng embedding.
 
-    Args:
-        audio_segment (np.ndarray): Audio segment to identify
-        sample_rate (int): Sample rate of the audio
-        reference_embeddings (dict): Dictionary of {speaker_label: embedding_tensor}
-        speaker_labels (list): List of possible speaker labels
-        embedding_model: Pre-loaded pyannote embedding model
+    Tham số:
+        audio_segment: source audio sau khi tách.
+        sample_rate: sample rate của audio.
+        reference_embeddings: embedding tham chiếu theo speaker label.
+        speaker_labels: các speaker có thể khớp.
+        embedding_model: pyannote embedding model đã load.
 
-    Returns:
-        str: Identified speaker label
+    Trả về:
+        Speaker label khớp nhất.
     """
 
-    # Extract embedding from audio segment
-    # Resample to 16kHz if needed (pyannote expects 16kHz)
+    # Pyannote embedding kỳ vọng 16 kHz.
     if sample_rate != 16000:
         audio_16k = librosa.resample(audio_segment, orig_sr=sample_rate, target_sr=16000)
     else:
         audio_16k = audio_segment
 
-    # Skip if too short for TDNN receptive field
+    # Segment quá ngắn không đủ receptive field cho TDNN, fallback về speaker đầu.
     if len(audio_16k) < int(MIN_EMBED_DURATION * 16000):
         logger.warning(
             f"Embedding skip: segment too short ({len(audio_16k)/16000:.2f}s < {MIN_EMBED_DURATION}s); "
@@ -1216,10 +1306,10 @@ def identify_speaker_with_embedding(audio_segment, sample_rate, reference_embedd
         )
         return speaker_labels[0] if speaker_labels else None
 
-    # Convert to tensor
+    # Chuyển sang tensor batch size 1 để đưa vào embedding model.
     audio_tensor = torch.tensor(audio_16k, dtype=torch.float32).unsqueeze(0).to(device)
 
-    # Extract embedding (guard against short/invalid audio)
+    # Trích embedding; nếu lỗi thì fallback để pipeline không dừng.
     try:
         with torch.inference_mode():
             embedding = embedding_model(audio_tensor)
@@ -1230,14 +1320,14 @@ def identify_speaker_with_embedding(audio_segment, sample_rate, reference_embedd
         )
         return speaker_labels[0] if speaker_labels else None
 
-    # Compare with reference embeddings using cosine similarity
+    # So khớp với embedding tham chiếu bằng cosine similarity.
     best_speaker = None
     best_similarity = -1.0
 
     for speaker_label in speaker_labels:
         if speaker_label in reference_embeddings:
             ref_embedding = reference_embeddings[speaker_label]
-            # Cosine similarity
+            # Cosine similarity càng cao thì càng giống speaker tham chiếu.
             similarity = torch.nn.functional.cosine_similarity(
                 embedding.mean(dim=1),
                 ref_embedding.mean(dim=1),
@@ -1256,15 +1346,22 @@ def identify_speaker_with_embedding(audio_segment, sample_rate, reference_embedd
 def process_overlapping_segments_with_separation(segment_list, audio, overlap_threshold=1.0,
                                                  separator=None, embedding_model=None):
     """
-    Process overlapping segments by separating them with SepReformer.
-    [Updated] Matches the volume of separated audio to the original overlap audio to prevent volume jumps.
+    Xử lý các đoạn nói chồng nhau bằng SepReformer.
 
-    Args:
-        segment_list: List of segments
-        audio: Audio dictionary
-        overlap_threshold: Overlap threshold
-        separator: Pre-loaded SepReformerSeparator object
-        embedding_model: Pre-loaded pyannote embedding model
+    Luồng xử lý:
+    1. Mỗi segment được gắn `enhanced_audio` ban đầu bằng audio gốc của chính nó.
+    2. Tìm các cặp segment overlap đủ dài.
+    3. Tách vùng overlap thành hai source.
+    4. Dùng speaker embedding để quyết định source nào thuộc speaker nào.
+    5. Ghi source đã tách vào đúng vị trí tương đối trong `enhanced_audio`.
+    6. Match âm lượng để tránh output sau tách bị to/nhỏ đột ngột.
+
+    Tham số:
+        segment_list: danh sách segment diarization.
+        audio: dict audio chuẩn hoá.
+        overlap_threshold: ngưỡng overlap cần xử lý.
+        separator: SepReformerSeparator đã load.
+        embedding_model: pyannote embedding model đã load.
     """
     if separator is None:
         logger.warning("SepReformer separator not provided, skipping separation")
@@ -1276,34 +1373,33 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
 
     logger.info(f"Processing overlapping segments with SepReformer (threshold: {overlap_threshold}s)")
 
-    # -------------------------------------------------------------------------
-    # [Added] Volume matching helper function
-    # -------------------------------------------------------------------------
+    # Hàm phụ khớp âm lượng để source tách ra không tạo bước nhảy volume khi
+    # ghép lại với phần audio gốc của segment.
     def match_target_amplitude(source_wav, target_wav):
         """
-        Match the volume (RMS) of source_wav to that of target_wav.
+        Khớp RMS của source_wav theo target_wav.
         """
-        # Epsilon to prevent division by zero
+        # Epsilon tránh chia cho 0 khi audio gần như im lặng.
         epsilon = 1e-10
 
-        # Calculate RMS (Root Mean Square) energy
+        # RMS đại diện năng lượng âm lượng trung bình.
         src_rms = np.sqrt(np.mean(source_wav**2))
         tgt_rms = np.sqrt(np.mean(target_wav**2))
         
         if src_rms < epsilon:
             return source_wav
         
-        # Calculate ratio (how much larger/smaller target is compared to source)
+        # Gain cần nhân để source có RMS gần target.
         gain = tgt_rms / (src_rms + epsilon)
         
-        # Apply gain
+        # Áp dụng gain.
         adjusted_wav = source_wav * gain
         
-        # Prevent clipping (-1.0 ~ 1.0)
+        # Chặn clipping ngoài khoảng [-1, 1].
         return np.clip(adjusted_wav, -1.0, 1.0)
-    # -------------------------------------------------------------------------
 
-    # 1. Initialize 'enhanced_audio' for all segments with the original audio
+    # Khởi tạo enhanced_audio bằng audio gốc của từng segment. Vùng overlap sẽ
+    # được thay thế sau, còn vùng không overlap giữ nguyên.
     waveform = audio["waveform"]
     sample_rate = audio["sample_rate"]
     
@@ -1316,7 +1412,7 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
         if 'sepreformer' not in seg:
             seg['sepreformer'] = False
 
-    # Detect overlapping segments
+    # Tìm các cặp overlap cần xử lý.
     overlapping_pairs = detect_overlapping_segments(segment_list, overlap_threshold)
 
     if not overlapping_pairs:
@@ -1325,11 +1421,12 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
 
     logger.info(f"Found {len(overlapping_pairs)} overlapping segment pairs")
 
-    # (Reference Embeddings extraction logic - kept as-is)
+    # Tạo embedding tham chiếu cho từng speaker từ các đoạn không overlap.
+    # Các đoạn sạch này giúp nhận diện source sau khi SepReformer tách.
     reference_embeddings = {}
     all_speakers = list(set([seg['speaker'] for seg in segment_list]))
 
-    # ... (Reference Embedding extraction - kept as-is) ...
+    # Mỗi speaker chỉ cần một đoạn đủ dài và không overlap để làm tham chiếu.
     for speaker in all_speakers:
         speaker_segments = [seg for seg in segment_list if seg['speaker'] == speaker]
         for seg in speaker_segments:
@@ -1360,7 +1457,7 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
                     logger.warning(f"Failed to compute reference embedding for {speaker}: {e}")
                     continue
 
-    # 2. Process overlap pairs
+    # Xử lý từng cặp overlap.
     for pair_idx, pair in enumerate(overlapping_pairs):
         overlap_start = pair['overlap_start']
         overlap_end = pair['overlap_end']
@@ -1370,17 +1467,17 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
         seg1_speaker = seg1['speaker']
         seg2_speaker = seg2['speaker']
 
-        # Extract overlapping audio (Original Mixture)
+        # Cắt vùng audio đang chứa hai speaker nói chồng nhau.
         start_frame = int(overlap_start * sample_rate)
         end_frame = int(overlap_end * sample_rate)
         overlap_audio = waveform[start_frame:end_frame]
 
-        # Separate with SepReformer
+        # Tách vùng overlap thành hai source.
         separated_src1, separated_src2 = separator.separate(
             overlap_audio, sample_rate
         )
 
-        # Identify speakers
+        # Xác định source thứ nhất gần với speaker nào hơn.
         speaker1_identity = identify_speaker_with_embedding(
             separated_src1, sample_rate, reference_embeddings, [seg1_speaker, seg2_speaker], embedding_model
         )
@@ -1392,19 +1489,16 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
             seg1_part = separated_src2
             seg2_part = separated_src1
 
-        # ---------------------------------------------------------------------
-        # [Fixed] Apply volume correction (match to original overlap region volume)
-        # ---------------------------------------------------------------------
-        # Adjust separated audio to match the RMS energy of the original overlap region (mixed sound)
-        # (Note: the original has 2 speakers mixed so its energy is naturally higher than a single separated source,
-        #  but this reference is much more natural than letting SepReformer output spike to 0dB.)
+        # Match RMS của source tách theo vùng overlap gốc để tránh source mới bị
+        # vọt âm lượng. Dù overlap gốc có hai giọng nên RMS cao hơn từng source,
+        # mốc này vẫn tự nhiên hơn để chống output bị spike.
         
         logger.debug(f"   Adjusting volume for overlap {pair_idx+1}...")
         seg1_part = match_target_amplitude(seg1_part, overlap_audio)
         seg2_part = match_target_amplitude(seg2_part, overlap_audio)
         # ---------------------------------------------------------------------
 
-        # 1) Update Seg1
+        # Ghi source của seg1 vào đúng vị trí tương đối trong enhanced_audio.
         seg1_start_global = int(seg1['start'] * sample_rate)
         rel_start_1 = start_frame - seg1_start_global
         
@@ -1414,7 +1508,7 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
             seg1['sepreformer'] = True
             logger.info(f"  ✓ Updated Seg1 enhanced_audio with volume-adjusted separated audio") 
 
-        # 2) Update Seg2
+        # Ghi source của seg2 vào đúng vị trí tương đối trong enhanced_audio.
         seg2_start_global = int(seg2['start'] * sample_rate)
         rel_start_2 = start_frame - seg2_start_global
 
@@ -1430,14 +1524,19 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
 @time_logger
 def asr(vad_segments, audio):
     """
-    Perform Automatic Speech Recognition (ASR) on the VAD segments of the given audio.
-    [Updated] Now processes segments iteratively exactly like asr_MoE to ensure 'enhanced_audio' 
-    is correctly utilized without relying on global buffer sandwiching.
+    Chạy ASR Whisper cho từng segment.
+
+    Điểm cần chú ý:
+    - Hàm xử lý từng segment độc lập để có thể ưu tiên `enhanced_audio` nếu
+      segment đã qua SepReformer.
+    - Whisper nhận audio đã cắt riêng, nên timestamp nội bộ bắt đầu từ 0.
+      Sau khi transcribe, start/end phải cộng lại `start_time` của segment để
+      trở về timeline tuyệt đối của file gốc.
     """
     if len(vad_segments) == 0:
         return []
 
-    # Full audio (for fallback)
+    # Waveform đầy đủ dùng làm dự phòng khi segment không có enhanced_audio.
     full_waveform = audio["waveform"]
     global_sample_rate = audio["sample_rate"]
 
@@ -1445,13 +1544,12 @@ def asr(vad_segments, audio):
 
     supported_languages = cfg["language"]["supported"]
     multilingual_flag = cfg["language"]["multilingual"]
-    # Following the asr_MoE approach (individual processing), batch size is set to 1.
-    # Can be adjusted based on library support, but individual processing is prioritized for accuracy.
+    # Xử lý từng segment một để metadata/enhanced_audio không bị lẫn giữa các đoạn.
     batch_size = 1
 
     if multilingual_flag:
-        # ... (Existing multilingual logic kept or needs to be converted to same loop structure) ...
-        # Multilingual implementation is extensive, left as placeholder for now
+        # Nhánh multilingual hiện chưa được triển khai trong flow segment-by-segment này.
+        # Nếu cần bật lại, phải đảm bảo vẫn chuyển timestamp relative -> absolute.
         pass
         return []
 
@@ -1462,43 +1560,42 @@ def asr(vad_segments, audio):
         end_time = segment["end"]
         speaker = segment.get("speaker", "Unknown")
 
-        # ---------------------------------------------------------------------
-        # 1. Audio Selection Logic (Identical to asr_MoE)
-        # ---------------------------------------------------------------------
+        # Bước 1: chọn nguồn audio cho segment.
+        # Nếu SepReformer đã tách overlap thì dùng enhanced_audio; nếu không thì
+        # cắt trực tiếp từ waveform đầy đủ.
         segment_audio = None
         is_enhanced = False
 
         if "enhanced_audio" in segment:
-            # Prefer using audio separated by SepReformer if available
+            # Ưu tiên audio đã tách giọng nói chồng nhau.
             raw_audio = segment["enhanced_audio"]
             is_enhanced = True
         else:
-            # Otherwise, slice the corresponding section from full audio
+            # Không có enhanced_audio thì cắt theo start/end gốc.
             start_frame = int(start_time * global_sample_rate)
             end_frame = int(end_time * global_sample_rate)
             raw_audio = full_waveform[start_frame:end_frame]
             is_enhanced = False
 
-        # 16kHz resampling (for Whisper input)
+        # Whisper/faster-whisper kỳ vọng 16 kHz.
         if global_sample_rate != 16000:
             segment_audio_16k = librosa.resample(raw_audio, orig_sr=global_sample_rate, target_sr=16000)
         else:
             segment_audio_16k = raw_audio
 
-        # Skip audio that is too short
+        # Bỏ qua đoạn quá ngắn, tránh model/feature extractor lỗi hoặc trả rỗng.
         if len(segment_audio_16k) < 160: 
             continue
 
-        # ---------------------------------------------------------------------
-        # 2. Prepare Dummy VAD & Transcribe
-        # ---------------------------------------------------------------------
-        # Since we're feeding pre-sliced audio, relative time is 0 ~ duration.
+        # Bước 2: tạo dummy VAD cho audio đã cắt.
+        # Vì input vào Whisper chỉ là segment riêng lẻ, timeline local luôn là
+        # 0 -> duration_sec.
         duration_sec = len(segment_audio_16k) / 16000
         dummy_vad = [{"start": 0.0, "end": duration_sec}]
 
         try:
-            # Language detection (can be done per segment or fixed to 'en')
-            # Default to 'en' following existing flow; use detect_language if needed
+            # Pipeline hiện cố định tiếng Anh. Nếu cần detect theo segment, có thể
+            # bật lại dòng detect_language bên dưới.
             # language, prob = asr_model.detect_language(segment_audio_16k)
             language = "en"
 
@@ -1510,16 +1607,16 @@ def asr(vad_segments, audio):
                 print_progress=False,
             )
             
-            # Process results
+            # Bước 3: chuẩn hoá kết quả về timeline gốc và gắn metadata segment.
             if transcribe_result and "segments" in transcribe_result:
                 for res_seg in transcribe_result["segments"]:
-                    # 1. Only process non-empty text
+                    # Chỉ giữ transcript có text.
                     if res_seg["text"].strip():
-                        # 2. Convert relative time (0~duration) to absolute time (start_time~)
+                        # Chuyển timestamp local của segment về timestamp tuyệt đối.
                         res_seg["start"] += start_time
                         res_seg["end"] += start_time
                         
-                        # 3. Restore metadata
+                        # Gắn lại speaker và các flag xử lý audio.
                         res_seg["speaker"] = speaker
                         res_seg["language"] = transcribe_result.get("language", language)
                         res_seg["sepreformer"] = segment.get("sepreformer", False)
@@ -1528,7 +1625,7 @@ def asr(vad_segments, audio):
                         if is_enhanced:
                             res_seg["enhanced_audio"] = raw_audio
 
-                        # 4. Correct timestamps if word-level timestamps exist
+                        # Word timestamp cũng cần cộng offset giống segment timestamp.
                         if "words" in res_seg:
                             for w in res_seg["words"]:
                                 w["start"] += start_time
@@ -1547,8 +1644,14 @@ import concurrent.futures
 @time_logger
 def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestamps=False, device="cuda"):
     """
-    Perform Automatic Speech Recognition (ASR) on the VAD segments using MoE with Parallel Execution.
-    [Updated] Runs Whisper, Parakeet, and Canary in parallel using ThreadPoolExecutor.
+    Chạy ASR MoE cho từng segment bằng ba model: Whisper, Parakeet, Canary.
+
+    Quy trình mỗi segment:
+    1. Chọn audio tốt nhất (`enhanced_audio` nếu có, nếu không cắt từ waveform gốc).
+    2. Resample về 16 kHz.
+    3. Gửi song song vào Whisper, Parakeet và Canary.
+    4. Dùng ROVER để vote transcript cuối.
+    5. Gắn metadata và timestamp tuyệt đối để xuất JSON/MP3.
     """
     if len(vad_segments) == 0:
         return [], 0.0, 0.0
@@ -1556,7 +1659,7 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
     if segment_demucs_flags is None:
         segment_demucs_flags = [False] * len(vad_segments)
 
-    # Full audio (for fallback)
+    # Waveform đầy đủ dùng làm dự phòng nếu segment chưa có enhanced_audio.
     full_waveform = audio["waveform"]
     global_sample_rate = audio["sample_rate"]
 
@@ -1566,7 +1669,8 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
     
     rover = RoverEnsembler()
 
-    # --- Helper Functions for Parallel Execution ---
+    # Hàm phụ chạy Whisper cho một segment. Trả về text, language, word timestamps
+    # nếu bật và thời gian xử lý để tính RT factor.
     def run_whisper_task(segment_audio_16k, dummy_vad):
         w_start = time.time()
         try:
@@ -1599,9 +1703,10 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
             logger.error(f"Whisper failed: {e}")
             return {"text": "", "language": "en", "words": [], "time": 0.0}
 
+    # Hàm phụ chạy Parakeet. API NeMo nhận list audio nên segment được bọc trong list.
     def run_parakeet_task(segment_audio_16k):
         try:
-            # Parakeet input requires list
+            # Parakeet yêu cầu input dạng list.
             p_res = asr_model_2.transcribe([segment_audio_16k])
             
             text_parakeet = ""
@@ -1618,12 +1723,13 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
             logger.error(f"Parakeet failed: {e}")
             return ""
 
+    # Hàm phụ chạy Canary. Model này thường nhận audio qua file path nên cần ghi WAV tạm.
     def run_canary_task(segment_audio_16k):
         try:
-            # Canary requires a file path usually, creating temp file safely inside thread
+            # Tạo file WAV tạm riêng cho từng thread để tránh tranh chấp path.
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_wav:
                 sf.write(temp_wav.name, segment_audio_16k, 16000)
-                # Ensure write is flushed
+                # Đảm bảo dữ liệu đã flush trước khi Canary đọc file.
                 temp_wav.flush()
                 
                 answer_ids = canary_model.generate(
@@ -1635,11 +1741,8 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
         except Exception as e:
             logger.error(f"Canary failed: {e}")
             return ""
-    # ---------------------------------------------
-
-    # Create a ThreadPoolExecutor
-    # max_workers=3 allows all three models to be attempted roughly at the same time.
-    # Note: Python GIL exists, but since these calls release GIL for C++/CUDA ops, it works for parallelization.
+    # ThreadPoolExecutor cho phép 3 model chạy gần như đồng thời.
+    # Dù Python có GIL, các tác vụ C++/CUDA thường release GIL nên vẫn có ích.
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
 
         for idx, segment in enumerate(vad_segments):
@@ -1647,55 +1750,51 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
             end_time = segment["end"]
             speaker = segment.get("speaker", "Unknown")
             
-            # 1. Audio Selection Logic
+            # Chọn nguồn audio cho segment, giống hàm asr thường.
             segment_audio = None
             is_enhanced = False
 
             if "enhanced_audio" in segment:
+                # Segment đã được SepReformer cải thiện.
                 raw_audio = segment["enhanced_audio"]
                 is_enhanced = True
             else:
+                # Dự phòng: cắt trực tiếp từ waveform đầy đủ.
                 start_frame = int(start_time * global_sample_rate)
                 end_frame = int(end_time * global_sample_rate)
                 raw_audio = full_waveform[start_frame:end_frame]
             
-            # 16kHz resampling
+            # Cả ba model ASR ở đây dùng input 16 kHz.
             if global_sample_rate != 16000:
                 segment_audio_16k = librosa.resample(raw_audio, orig_sr=global_sample_rate, target_sr=16000)
             else:
                 segment_audio_16k = raw_audio
 
+            # Bỏ qua đoạn quá ngắn để tránh lỗi inference.
             if len(segment_audio_16k) < 160: 
                 continue
 
-            # Dummy VAD for Whisper
+            # Dummy VAD cho Whisper vì audio đã là segment cắt sẵn.
             duration_sec = len(segment_audio_16k) / 16000
             dummy_vad = [{"start": 0.0, "end": duration_sec}]
 
-            # ---------------------------------------------------------------------
-            # Submit Tasks in Parallel
-            # ---------------------------------------------------------------------
+            # Gửi cùng một segment tới ba model ASR.
             future_whisper = executor.submit(run_whisper_task, segment_audio_16k, dummy_vad)
             future_parakeet = executor.submit(run_parakeet_task, segment_audio_16k)
             future_canary = executor.submit(run_canary_task, segment_audio_16k)
 
-            # ---------------------------------------------------------------------
-            # Wait for results (Barrier)
-            # ---------------------------------------------------------------------
-            # .result() blocks until the future is done
+            # Điểm chờ: đợi đủ ba model trả kết quả trước khi ensemble.
             whisper_res = future_whisper.result()
             text_parakeet = future_parakeet.result()
             text_canary = future_canary.result()
 
-            # Unpack Whisper results
+            # Tách kết quả Whisper để vừa lấy text vừa lấy word timestamp/thời gian.
             text_whisper = whisper_res["text"]
             detected_language = whisper_res["language"]
             words = whisper_res["words"]
             total_whisper_time += whisper_res["time"]
 
-            # ---------------------------------------------------------------------
-            # 5. Ensemble & Result Construction
-            # ---------------------------------------------------------------------
+            # Bỏ phiếu transcript cuối từ ba nguồn ASR.
             text_ensemble = rover.align_and_vote([text_whisper, text_canary, text_parakeet])
 
             seg_result = {
@@ -1716,6 +1815,8 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
                 seg_result["enhanced_audio"] = raw_audio
 
             if enable_word_timestamps and words:
+                # Word timestamp từ Whisper đang là timeline local của segment,
+                # cần cộng start_time để trở về timeline file gốc.
                 for w in words:
                     w["start"] += start_time
                     w["end"] += start_time
@@ -1727,15 +1828,15 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
 
 def add_qwen3omni_caption(filtered_list, audio, save_path):
     """
-    Call Qwen3-Omni API for each ASR result segment to add audio captions.
+    Gọi Qwen3-Omni API cho từng segment ASR để thêm audio caption.
 
-    Args:
-        filtered_list (list): ASR result segment list
-        audio (dict): Audio dictionary (containing waveform and sample_rate)
-        save_path (str): Path to save temporary audio files
+    Tham số:
+        filtered_list: danh sách segment sau ASR.
+        audio: dict audio có waveform và sample_rate.
+        save_path: thư mục dùng để ghi file WAV tạm.
 
-    Returns:
-        tuple: (segment list with qwen3omni_caption added, processing time in seconds)
+    Trả về:
+        (danh sách segment đã thêm qwen3omni_caption, thời gian xử lý giây)
     """
     import soundfile as sf
 
@@ -1744,8 +1845,8 @@ def add_qwen3omni_caption(filtered_list, audio, save_path):
 
     for idx, segment in enumerate(filtered_list):
         try:
-            # Extract segment audio
-            # [CRITICAL] Prefer audio processed by SepReformer if available (to match the saved file)
+            # Cắt audio của segment. Nếu segment có enhanced_audio thì dùng nó để
+            # caption khớp với file MP3 sẽ xuất.
             if "enhanced_audio" in segment:
                 segment_audio = segment["enhanced_audio"]
                 sample_rate = audio["sample_rate"]
@@ -1757,16 +1858,16 @@ def add_qwen3omni_caption(filtered_list, audio, save_path):
                 end_frame = int(end_time * sample_rate)
                 segment_audio = audio["waveform"][start_frame:end_frame]
 
-            # Save as temporary audio file
+            # Ghi WAV tạm vì API nội bộ nhận audio_url dạng file://.
             temp_audio_path = os.path.join(save_path, f"temp_segment_{idx:05d}.wav")
             sf.write(temp_audio_path, segment_audio, sample_rate)
 
-            # Call Qwen3-Omni API
+            # Gọi service Qwen3-Omni đang chạy local.
             url = f"http://localhost:{QWEN_3_OMNI_PORT}/v1/chat/completions"
             headers = {"Content-Type": "application/json"}
 
-            # Must encode local file as base64 or provide as URL
-            # Here we use the temporary file path (actual deployment may need a server-accessible URL)
+            # Ở môi trường này dùng file://. Khi deploy qua network có thể cần URL
+            # mà service Qwen3-Omni truy cập được hoặc base64 audio.
             data = {
                 "messages": [
                     {
@@ -1785,7 +1886,7 @@ def add_qwen3omni_caption(filtered_list, audio, save_path):
 
             if response.status_code == 200:
                 result = response.json()
-                # Extract content from response
+                # Lấy nội dung caption từ response OpenAI-compatible.
                 caption = result.get("choices", [{}])[0].get("message", {}).get("content", "")
                 segment["qwen3omni_caption"] = caption
                 logger.debug(f"Segment {idx}: Successfully added Qwen3-Omni caption")
@@ -1793,7 +1894,7 @@ def add_qwen3omni_caption(filtered_list, audio, save_path):
                 logger.warning(f"Segment {idx}: API call failed with status {response.status_code}")
                 segment["qwen3omni_caption"] = ""
 
-            # Delete temporary file
+            # Xoá WAV tạm ngay sau khi gọi API xong.
             if os.path.exists(temp_audio_path):
                 os.remove(temp_audio_path)
 
@@ -1808,8 +1909,13 @@ def add_qwen3omni_caption(filtered_list, audio, save_path):
     return filtered_list, caption_processing_time
 
 
-# Cost calculation function
+# =============================================================================
+# Tiện ích hậu xử lý văn bản/LLM
+# =============================================================================
+# Các hàm dưới đây dùng cho phần gắn speaker tag, parse kết quả LLM và tính chi
+# phí ước lượng khi có gọi model ngôn ngữ.
 def calculate_cost(model_name: str, input_tokens: int, output_tokens: int) -> float:
+    """Tính chi phí ước lượng theo bảng giá hard-code cho một số model OpenAI."""
     pricing = {
         "gpt-4.1": {
             "input": 2.00 / 1_000_000,
@@ -1854,25 +1960,28 @@ from collections import defaultdict
 
 def speaker_tagged_text(data):
     """
-    Add speaker tags to the given data and reassign speaker numbers
-    sequentially (s0, s1, s2...) based on order of appearance in the text.
+    Thêm tag speaker vào text và đánh lại số speaker theo thứ tự xuất hiện.
+
+    Ví dụ:
+    - Speaker gốc có thể là SPEAKER_02, SPEAKER_00, SPEAKER_01.
+    - Output sẽ đổi thành [s0], [s1], [s2] theo thứ tự xuất hiện trong transcript.
     """
-    # 1. Generate initial tags and record the order of unique speaker appearances.
+    # Bước 1: tạo tag ban đầu và ghi nhận thứ tự xuất hiện của speaker.
     initially_tagged_data = []
     unique_speakers_in_order = []
     seen_speakers = set()
 
     for item in data:
-        # Generate original tag in 'SPEAKER_01' -> '[s1]' format
+        # Chuyển SPEAKER_01 -> [s1].
         speaker_num = item['speaker'].replace('SPEAKER_', '')
         original_tag = f"[s{int(speaker_num)}]"
 
-        # Add new unique speaker tags to the list in order of appearance
+        # Ghi nhận speaker mới theo đúng thứ tự xuất hiện trong transcript.
         if original_tag not in seen_speakers:
             unique_speakers_in_order.append(original_tag)
             seen_speakers.add(original_tag)
         
-        # Temporarily store original text and tags for later mapping application
+        # Lưu tạm tag gốc để lát nữa map sang tag tuần tự mới.
         initially_tagged_data.append({
             'text': item['text'],
             'start': item['start'],
@@ -1880,21 +1989,21 @@ def speaker_tagged_text(data):
             'original_tag': original_tag
         })
 
-    # 2. Create a mapping to convert original tags to new sequential tags.
-    # e.g.: {'[s2]': '[s0]', '[s0]': '[s1]', '[s1]': '[s2]'}
+    # Bước 2: tạo mapping từ tag gốc sang tag tuần tự mới.
+    # Ví dụ: {'[s2]': '[s0]', '[s0]': '[s1]', '[s1]': '[s2]'}.
     speaker_map = {
         original_tag: f"[s{i}]" 
         for i, original_tag in enumerate(unique_speakers_in_order)
     }
 
-    # 3. Apply the generated mapping to produce the final result.
+    # Bước 3: áp dụng mapping để tạo output cuối.
     result = []
     for item in initially_tagged_data:
         original_tag = item['original_tag']
-        new_tag = speaker_map[original_tag]  # Get new tag from mapping
+        new_tag = speaker_map[original_tag]  # lấy tag mới từ mapping
         
         final_item = {
-            'text': f"{new_tag}{item['text']}",  # Prepend new tag to text
+            'text': f"{new_tag}{item['text']}",  # thêm tag speaker vào đầu text
             'start': item['start'],
             'end': item['end']
         }
@@ -1908,19 +2017,20 @@ import ast
 
 def parse_speaker_summary(llm_output: str) -> list | None:
     """
-    Extract and parse a JSON array from the LLM output string.
-    Handles 'json' prefix, code blocks (```), and surrounding whitespace.
+    Trích và parse JSON array từ output LLM.
+
+    Hàm chịu được output có code fence, tiền tố json hoặc whitespace thừa, miễn
+    là bên trong có một mảng JSON dạng [...].
     """
     if not llm_output:
         return None
 
     try:
-        # Remove code blocks like ```json ... ``` or ``` ... ```
-        # Use regex to find content between '[' and ']'
+        # Tìm phần nằm giữa dấu [ và ] đầu/cuối, kể cả khi LLM bọc trong code block.
         match = re.search(r'\[.*\]', llm_output, re.DOTALL)
         if match:
             json_str = match.group(0)
-            # Convert JSON string to Python object (list of dicts)
+            # Chuyển chuỗi JSON thành list/dict Python.
             return json.loads(json_str)
         else:
             print("Parsing Error: Could not find a valid JSON array format ([]).")
@@ -1935,21 +2045,21 @@ def parse_speaker_summary(llm_output: str) -> list | None:
 
 def process_llm_diarization_output(llm_output: str) -> list[dict]:
 
-    # 1. Find ```json ... ``` code blocks in LLM output
+    # Bước 1: ưu tiên lấy nội dung trong code block ```json ... ```.
     json_match = re.search(r"```json\s*([\s\S]*?)\s*```", llm_output)
     if not json_match:
-        # If no ```json block found, try parsing the entire string
+        # Nếu không có code block, thử parse toàn bộ string.
         json_string = llm_output
     else:
         json_string = json_match.group(1)
 
-    # 2. Parse JSON string into Python object
+    # Bước 2: parse JSON string thành object Python.
     try:
         llm_data = json.loads(json_string)
     except json.JSONDecodeError:
-        # Fallback for when LLM outputs Python list format ('[{"text":...}]')
+        # Dự phòng khi LLM trả format gần giống Python literal.
         try:
-            # ast.literal_eval is a more secure version of eval.
+            # ast.literal_eval an toàn hơn eval vì chỉ parse literal.
             import ast
             llm_data = ast.literal_eval(json_string)
         except (ValueError, SyntaxError) as e:
@@ -1960,6 +2070,12 @@ def process_llm_diarization_output(llm_output: str) -> list[dict]:
     return llm_data
 
 def sortformer_dia(predicted_segments):
+    """
+    Chuyển output thô của NeMo Sortformer thành DataFrame diarization chuẩn.
+
+    Sortformer trả segment dạng chuỗi "start end SPEAKER_xx"; hàm này parse về
+    cột start/end/speaker để các bước sau dùng chung format với pyannote.
+    """
     lists = [x for x in predicted_segments if isinstance(x, (list, tuple))]
     if not lists:
         lists = predicted_segments
@@ -1969,12 +2085,12 @@ def sortformer_dia(predicted_segments):
     for idx, seg in enumerate(segs):
         start_s, end_s, sp = seg.split()
         start, end = float(start_s), float(end_s)
-        # Convert SPEAKER format
+        # Chuyển SPEAKER format về dạng SPEAKER_00, SPEAKER_01...
         num = int(sp.split('_')[1])
         speaker = f"SPEAKER_{num:02d}"
-        # Labels (A, B, C, ...)
+        # Label chỉ dùng để tương thích format DataFrame cũ.
         label = chr(ord('A') + idx)
-        # Time formatting function
+        # Format timestamp giống pyannote segment string.
         def fmt(sec):
             td = datetime.timedelta(seconds=sec)
             hrs = td.seconds // 3600 + td.days * 24
@@ -1997,11 +2113,12 @@ def sortformer_dia(predicted_segments):
 
 def df_to_list(df: pd.DataFrame) -> list[dict]:
     """
-    Convert each row of the DataFrame to a dict with the following format:
-      - index: 5-digit zero-padded string
-      - start: float
-      - end: float
-      - speaker: str
+    Chuyển DataFrame diarization thành list dict dùng cho ASR/export.
+
+    Mỗi item gồm:
+      - index: chuỗi 5 chữ số.
+      - start/end: giây trên timeline file gốc.
+      - speaker: speaker label.
     """
     records = []
     for i, row in df.iterrows():
@@ -2016,7 +2133,7 @@ def df_to_list(df: pd.DataFrame) -> list[dict]:
 
 def deduplicate_segments_by_index(segments: list[dict], logger=None) -> list[dict]:
     """
-    Ensure each segment index is unique, keeping the first occurrence.
+    Bảo đảm mỗi index segment chỉ xuất hiện một lần, giữ bản đầu tiên.
     """
     seen = set()
     deduped = []
@@ -2033,14 +2150,17 @@ def deduplicate_segments_by_index(segments: list[dict], logger=None) -> list[dic
 
 def split_long_segments(segment_list, max_duration=30.0):
     """
-    Split segments longer than max_duration by time (without using VAD).
+    Cắt các segment dài hơn max_duration theo thời gian, không dùng VAD.
 
-    Args:
-        segment_list (list): List of segment dictionaries to split.
-        max_duration (float): Maximum allowed segment length in seconds.
+    Mục đích là tránh đưa một đoạn quá dài vào ASR, vì vừa chậm vừa dễ làm model
+    mất tập trung hoặc lệch timestamp.
 
-    Returns:
-        list: New segment list after splitting.
+    Tham số:
+        segment_list: danh sách segment cần xử lý.
+        max_duration: độ dài tối đa mỗi segment, tính bằng giây.
+
+    Trả về:
+        Danh sách segment mới đã đánh lại index.
     """
     new_segments = []
     new_index = 0
@@ -2051,17 +2171,17 @@ def split_long_segments(segment_list, max_duration=30.0):
         speaker = segment['speaker']
         duration = end_time - start_time
 
-        # If segment length is less than or equal to max, add as-is
+        # Segment đủ ngắn thì giữ nguyên và chỉ đánh lại index.
         if duration <= max_duration:
             segment['index'] = str(new_index).zfill(5)
             new_segments.append(segment)
             new_index += 1
-        # If segment length exceeds max, split it
+        # Segment quá dài thì cắt thành nhiều chunk nối tiếp nhau.
         else:
             current_start = start_time
-            # Repeat while current start time is less than the original segment's end time
+            # Lặp tới khi phủ hết khoảng thời gian gốc.
             while current_start < end_time:
-                # Calculate next split point (add max length, but don't exceed original end time)
+                # Điểm kết thúc chunk tiếp theo không được vượt end gốc.
                 chunk_end = min(current_start + max_duration, end_time)
                 
                 new_segments.append({
@@ -2071,7 +2191,7 @@ def split_long_segments(segment_list, max_duration=30.0):
                     'speaker': speaker
                 })
                 new_index += 1
-                # Update next chunk's start time to current chunk's end time
+                # Chunk kế tiếp bắt đầu ngay tại end của chunk hiện tại.
                 current_start = chunk_end
                 
     return new_segments
@@ -2079,7 +2199,11 @@ def split_long_segments(segment_list, max_duration=30.0):
 
 def _build_silence_intervals(waveform, sample_rate, min_silence):
     """
-    Use VAD to find silence intervals that can be used as cut points.
+    Dùng VAD để tìm các khoảng im lặng có thể dùng làm điểm cắt chunk.
+
+    Trả về:
+        (total_duration, silence_intervals)
+        silence_intervals là list các khoảng (start, end) tính bằng giây.
     """
     vad_model = globals().get("vad")
     if vad_model is None:
@@ -2098,6 +2222,7 @@ def _build_silence_intervals(waveform, sample_rate, min_silence):
         resampled,
         vad_model.vad_model,
         sampling_rate=silero_vad.SAMPLING_RATE,
+        min_silence_duration_ms=MIN_SPLIT_SILENCE,
     )
     total_duration = len(waveform) / sample_rate
     if not speech_ts:
@@ -2123,18 +2248,25 @@ def _build_silence_intervals(waveform, sample_rate, min_silence):
 
 def _build_chunk_ranges(total_duration, silence_intervals, max_duration):
     """
-    Determine chunk ranges by splitting at silence points, ensuring all chunks are under max_duration.
-    Prioritizes splitting at silence (non-speech) intervals to avoid cutting in the middle of speech.
+    Tạo danh sách khoảng chunk cho diarization.
+
+    Ưu tiên:
+    - Nếu audio ngắn hơn max_duration: dùng một chunk.
+    - Nếu có khoảng lặng: cắt tại midpoint của khoảng lặng gần giới hạn nhất.
+    - Nếu không có khoảng lặng phù hợp: hard cut tại max_duration.
+
+    Mục tiêu là giữ mỗi chunk đủ ngắn cho Sortformer nhưng giảm khả năng cắt
+    giữa câu nói.
     """
     epsilon = 1e-3
     if total_duration <= max_duration + epsilon:
         return [(0.0, total_duration)]
 
-    # Extract midpoints of silence intervals as potential cut points
+    # Dùng midpoint của mỗi khoảng lặng làm ứng viên điểm cắt.
     silence_points = sorted([(start + end) / 2.0 for start, end in silence_intervals])
 
     if not silence_points:
-        # No silence found, fall back to hard cuts at max_duration
+        # Không có khoảng lặng: dự phòng bằng cách cắt cứng theo max_duration.
         chunk_ranges = []
         chunk_start = 0.0
         while chunk_start < total_duration - epsilon:
@@ -2147,27 +2279,26 @@ def _build_chunk_ranges(total_duration, silence_intervals, max_duration):
     chunk_start = 0.0
 
     while chunk_start < total_duration - epsilon:
-        # Find the best silence point within max_duration from chunk_start
+        # Tìm điểm lặng xa nhất nhưng vẫn nằm trong giới hạn max_duration.
         limit = chunk_start + max_duration
 
-        # Get all silence points that are after chunk_start and before/at limit
+        # Chỉ xét điểm cắt nằm sau chunk_start và không vượt limit.
         candidates = [p for p in silence_points if chunk_start + epsilon < p <= limit]
 
         if candidates:
-            # Use the last (furthest) silence point within the limit
+            # Dùng điểm lặng xa nhất để chunk dài nhất có thể nhưng vẫn an toàn.
             chunk_end = candidates[-1]
         else:
-            # No silence point found within max_duration
-            # Check if there's any silence point after limit
+            # Không có điểm lặng trong giới hạn. Nếu có điểm lặng ở xa hơn thì
+            # vẫn phải hard cut tại limit để không vượt max_duration.
             future_candidates = [p for p in silence_points if p > limit]
             if future_candidates:
-                # There's silence ahead but beyond max_duration, use limit as hard cut
                 chunk_end = min(limit, total_duration)
             else:
-                # No more silence points, go to the end
+                # Không còn điểm lặng nào phía sau, lấy tới cuối audio.
                 chunk_end = total_duration
 
-        # Ensure we're making progress
+        # Bảo đảm vòng lặp luôn tiến, tránh chunk có độ dài gần 0.
         if chunk_end - chunk_start < epsilon:
             chunk_end = min(chunk_start + max_duration, total_duration)
             if chunk_end - chunk_start < epsilon:
@@ -2188,7 +2319,10 @@ def _extract_speaker_embedding(
     min_duration: float = 0.5,
 ):
     """
-    Compute a single speaker embedding from a segment of the full audio.
+    Trích một speaker embedding từ một đoạn audio gốc.
+
+    Hàm dùng cho việc nối speaker label giữa các chunk diarization. Với segment
+    dài, chỉ lấy cửa sổ giữa đoạn để giảm nhiễu và tiết kiệm thời gian.
     """
     if embedder is None:
         return None
@@ -2205,7 +2339,7 @@ def _extract_speaker_embedding(
     if duration < min_duration:
         return None
 
-    # Center-crop long segments to a fixed analysis window.
+    # Với segment dài, lấy cửa sổ quanh giữa đoạn để embedding ổn định hơn.
     if duration > sample_window:
         center = (start + end) / 2.0
         start = center - sample_window / 2.0
@@ -2222,10 +2356,10 @@ def _extract_speaker_embedding(
         if sample_rate != target_sr:
             segment = librosa.resample(segment, orig_sr=sample_rate, target_sr=target_sr)
     except Exception:
-        # If resampling fails, fall back to the original segment.
+        # Nếu resample lỗi, dùng lại segment gốc.
         target_sr = sample_rate
 
-    # pyannote Inference expects a mapping with waveform + sample_rate
+    # pyannote Inference nhận input dạng dict có waveform và sample_rate.
     try:
         torch_seg = torch.as_tensor(segment, dtype=torch.float32).unsqueeze(0)
         emb = embedder({"waveform": torch_seg, "sample_rate": target_sr})
@@ -2241,6 +2375,7 @@ def _extract_speaker_embedding(
 
 
 def _cosine_similarity(vec_a, vec_b):
+    """Tính cosine similarity; trả -1.0 nếu vector không hợp lệ."""
     if vec_a is None or vec_b is None:
         return -1.0
     denom = np.linalg.norm(vec_a) * np.linalg.norm(vec_b)
@@ -2251,7 +2386,10 @@ def _cosine_similarity(vec_a, vec_b):
 
 def _compute_chunk_speaker_centroids(chunk_df: pd.DataFrame, audio_info, embedder: Inference | None):
     """
-    Build per-speaker centroids for a diarization chunk using short audio snippets.
+    Tạo centroid embedding cho từng speaker trong một chunk diarization.
+
+    Mỗi speaker lấy tối đa vài segment đầu đủ điều kiện, rồi trung bình embedding
+    để tạo đại diện speaker trong chunk đó.
     """
     if embedder is None or chunk_df is None or chunk_df.empty:
         return {}
@@ -2279,8 +2417,11 @@ def align_speakers_across_chunks(
     similarity_threshold: float = 0.75,
 ):
     """
-    Link local speaker labels from sequential diarization chunks into a single
-    recording-level speaker inventory using embedding similarity.
+    Nối speaker label cục bộ giữa các chunk thành speaker label toàn file.
+
+    Vì Sortformer chạy từng chunk, SPEAKER_00 ở chunk A không chắc là cùng người
+    với SPEAKER_00 ở chunk B. Hàm này dùng embedding similarity để map speaker
+    local về speaker global nhất quán trên toàn recording.
     """
     if embedder is None or not chunk_frames:
         logger.warning("Speaker embedder unavailable; skipping cross-chunk speaker linking.")
@@ -2298,7 +2439,9 @@ def align_speakers_across_chunks(
 
         local_centroids = _compute_chunk_speaker_centroids(df, audio_info, embedder)
         mapping: dict[str, str] = {}
-        used_global_ids_in_chunk: set[str] = set()  # Track global IDs already used in this chunk
+        # Theo dõi global speaker đã dùng trong chunk để hai local speaker khác
+        # nhau không bị map vào cùng một global ID.
+        used_global_ids_in_chunk: set[str] = set()
 
         for local_speaker in df["speaker"].unique():
             emb = local_centroids.get(local_speaker)
@@ -2309,7 +2452,7 @@ def align_speakers_across_chunks(
                 for gid, centroid in global_centroids.items():
                     if centroid is None:
                         continue
-                    # Skip global IDs already mapped to other local speakers in this chunk
+                    # Không cho hai local speaker trong cùng chunk dùng chung global ID.
                     if gid in used_global_ids_in_chunk:
                         continue
                     sim = _cosine_similarity(emb, centroid)
@@ -2319,7 +2462,7 @@ def align_speakers_across_chunks(
 
             if best_sim >= similarity_threshold and best_id is not None:
                 mapping[local_speaker] = best_id
-                used_global_ids_in_chunk.add(best_id)  # Mark this global ID as used in this chunk
+                used_global_ids_in_chunk.add(best_id)
                 count = global_counts.get(best_id, 0)
                 global_centroids[best_id] = (global_centroids[best_id] * count + emb) / (
                     count + 1
@@ -2329,7 +2472,7 @@ def align_speakers_across_chunks(
                 global_id = f"SPEAKER_{next_global_idx:02d}"
                 next_global_idx += 1
                 mapping[local_speaker] = global_id
-                used_global_ids_in_chunk.add(global_id)  # Mark this new global ID as used
+                used_global_ids_in_chunk.add(global_id)
                 global_centroids[global_id] = emb
                 global_counts[global_id] = 1 if emb is not None else 0
 
@@ -2347,8 +2490,17 @@ def prepare_diarization_chunks(
     min_silence=MIN_SPLIT_SILENCE,
 ):
     """
-    Split long audio files prior to diarization using silence from VAD.
-    Returns chunk metadata and optional temp directory for cleanup.
+    Chuẩn bị chunk audio trước khi chạy diarization.
+
+    Hàm này:
+    - Dùng VAD tìm khoảng lặng.
+    - Tạo các chunk dưới MAX_DIA_CHUNK_DURATION.
+    - Export chunk thành WAV mono tạm.
+    - Trả metadata path/offset/duration để sau khi Sortformer trả thời gian local
+      có thể cộng offset về timeline file gốc.
+
+    Trả về:
+        (chunk_entries, temp_dir)
     """
     waveform = audio_info["waveform"]
     sample_rate = audio_info["sample_rate"]
@@ -2365,15 +2517,15 @@ def prepare_diarization_chunks(
         and chunk_ranges[0][0] <= epsilon
         and abs(chunk_ranges[0][1] - total_duration) <= epsilon
     ):
-        # Single chunk case: use normalized_audio if available, otherwise create temp mono file
+        # Trường hợp audio đủ ngắn: vẫn export ra WAV mono tạm để Sortformer đọc ổn định.
         if normalized_audio is not None:
-            # Create a temporary file with the normalized mono audio
+            # Dùng audio đã chuẩn hoá nếu có.
             temp_dir = tempfile.mkdtemp(prefix="pre_diar_")
             temp_path = os.path.join(temp_dir, "full_audio.wav")
             normalized_audio.export(temp_path, format="wav", parameters=["-ac", "1"])
             return [{"path": temp_path, "offset": 0.0, "duration": total_duration}], temp_dir
         else:
-            # Fallback: load and ensure mono
+            # Dự phòng: tự load lại từ file và ép mono.
             temp_audio = AudioSegment.from_file(audio_path).set_channels(1)
             temp_dir = tempfile.mkdtemp(prefix="pre_diar_")
             temp_path = os.path.join(temp_dir, "full_audio.wav")
@@ -2383,7 +2535,7 @@ def prepare_diarization_chunks(
 
     if normalized_audio is None:
         normalized_audio = AudioSegment.from_file(audio_path)
-        # Ensure mono audio for diarization
+        # Ép mono để diarization model nhận input đúng format.
         normalized_audio = normalized_audio.set_channels(1)
     temp_dir = tempfile.mkdtemp(prefix="pre_diar_")
     chunk_entries = []
@@ -2393,7 +2545,7 @@ def prepare_diarization_chunks(
         end_ms = max(start_ms, int(round(end_sec * 1000)))
         chunk_audio = normalized_audio[start_ms:end_ms]
         chunk_path = os.path.join(temp_dir, f"chunk_{idx:03d}.wav")
-        # Explicitly export as mono WAV with 24kHz sample rate
+        # Export WAV mono rõ ràng để tránh file nguồn stereo gây sai shape.
         chunk_audio.export(chunk_path, format="wav", parameters=["-ac", "1"])
         chunk_entries.append(
             {
@@ -2411,7 +2563,7 @@ def prepare_diarization_chunks(
 
 def ko_transliterate_english(text: str) -> str:
     """
-    Find English segments in the input string and convert them to Korean pronunciation.
+    Tìm đoạn tiếng Anh trong text và chuyển sang cách đọc tiếng Hàn bằng G2P.
     """
     def _repl(m: re.Match) -> str:
         segment = m.group(0)
@@ -2420,31 +2572,35 @@ def ko_transliterate_english(text: str) -> str:
 
 
 def ko_process_json(input_list: str) -> None:
+    """Hậu xử lý list segment: nếu text có chữ Latin thì chuyển sang phát âm Hàn."""
     for entry in input_list:
         text = entry.get("text", "")
-        # Convert if English is included
+        # Chỉ chuyển khi text có ký tự Latin.
         if re.search(r"[A-Za-z]", text):
             entry["text"] = ko_transliterate_english(text)
 
 def export_segments_with_enhanced_audio(audio_info, segment_list, save_dir, audio_name):
     """
-    Export segments to MP3 files.
-    If 'enhanced_audio' exists in the segment (processed by SepReformer), use it.
-    Otherwise, slice from the original audio.
+    Xuất từng segment thành MP3.
+
+    Quy tắc chọn audio:
+    - Nếu segment có `is_separated=True` và `enhanced_audio`, dùng audio đã tách
+      bởi SepReformer.
+    - Nếu không, cắt trực tiếp từ audio gốc/đã chuẩn hoá.
     """
     import os
     from pydub import AudioSegment as PydubAudioSegment
     
-    # Create folder for saving segments
+    # Thư mục chứa MP3 của từng segment.
     segments_dir = os.path.join(save_dir, audio_name)
     os.makedirs(segments_dir, exist_ok=True)
     
-    # Original full audio (Pydub object)
+    # AudioSegment đầy đủ dùng để cắt các segment không có enhanced_audio.
     full_audio_segment = audio_info.get("audio_segment")
     sample_rate = audio_info["sample_rate"]
     
     if full_audio_segment is None:
-        # If audio_segment is unavailable, create from waveform (fallback)
+        # Dự phòng: dựng AudioSegment từ waveform float32.
         waveform_int16 = (audio_info["waveform"] * 32767).astype(np.int16)
         full_audio_segment = PydubAudioSegment(
             waveform_int16.tobytes(),
@@ -2456,19 +2612,18 @@ def export_segments_with_enhanced_audio(audio_info, segment_list, save_dir, audi
     logger.info(f"Exporting {len(segment_list)} segments with enhanced audio check...")
 
     for i, seg in enumerate(segment_list):
-        # Generate filename (e.g.: 00001_SPEAKER_01.mp3)
+        # Tên file gồm index và speaker để dễ tra lại JSON.
         idx_str = seg.get("index", f"{i:05d}")
         spk = seg.get("speaker", "Unknown")
         filename = f"{idx_str}_{spk}.mp3"
         file_path = os.path.join(segments_dir, filename)
 
-        # 1. Check for SepReformer-processed 'enhanced_audio'
+        # Ưu tiên audio đã tách từ SepReformer nếu segment có.
         if seg.get("is_separated", False) and "enhanced_audio" in seg:
-            # Convert Numpy array -> Pydub AudioSegment
+            # Chuyển numpy waveform -> Pydub AudioSegment.
             enhanced_waveform = seg["enhanced_audio"]
 
-            # Convert float32 (-1.0 ~ 1.0) -> int16 range
-            # Apply clipping to prevent overflow
+            # float32 [-1, 1] -> int16; clip để tránh overflow.
             enhanced_waveform = np.clip(enhanced_waveform, -1.0, 1.0)
             wav_int16 = (enhanced_waveform * 32767).astype(np.int16)
 
@@ -2478,15 +2633,15 @@ def export_segments_with_enhanced_audio(audio_info, segment_list, save_dir, audi
                 sample_width=2,
                 channels=1
             )
-            # logger.debug(f"Segment {idx_str}: Saved using SepReformer output.")
+            # Có thể bật log này nếu cần xác nhận segment đã dùng output SepReformer.
 
         else:
-            # 3. If neither applied, extract from original
+            # Không có enhanced_audio thì cắt từ full_audio_segment.
             start_ms = int(seg["start"] * 1000)
             end_ms = int(seg["end"] * 1000)
             target_segment = full_audio_segment[start_ms:end_ms]
 
-        # Save as MP3
+        # Ghi file MP3 segment.
         target_segment.export(file_path, format="mp3")
         
 def main_process(audio_path, save_path=None, audio_name=None,
@@ -2501,10 +2656,25 @@ def main_process(audio_path, save_path=None, audio_name=None,
                  speaker_embedder = None,
                  speaker_link_threshold: float = 0.75):
 
+    """
+    Xử lý một file audio từ đầu đến cuối.
+
+    Luồng chính:
+    1. Decode OPUS/OGG nếu cần.
+    2. Chuẩn hoá audio.
+    3. Chia chunk và chạy Sortformer diarization.
+    4. Nối speaker giữa các chunk bằng embedding.
+    5. Cắt segment dài, xử lý nhạc nền bằng Demucs nếu bật.
+    6. Tách đoạn nói chồng bằng SepReformer nếu bật.
+    7. Chạy ASR thường hoặc ASR MoE.
+    8. Tuỳ chọn caption Qwen3-Omni, Korean G2P.
+    9. Xuất MP3 từng segment và JSON metadata.
+    """
     
     proc_audio_path = audio_path
     opus_temp_dir = None
     try:
+        # Bước 0a: đảm bảo input OPUS/OGG được đổi sang WAV tạm trước khi load.
         target_sr = int(cfg["entrypoint"]["SAMPLE_RATE"])
         proc_audio_path, opus_temp_dir = convert_opus_to_wav_if_needed(
             audio_path, target_sr=target_sr, logger=logger
@@ -2513,12 +2683,13 @@ def main_process(audio_path, save_path=None, audio_name=None,
         if not proc_audio_path.endswith((".mp3", ".wav", ".flac", ".m4a", ".aac", ".opus")):
             logger.warning(f"Unsupported file type: {proc_audio_path}")
 
-        # for a single audio from path Ïaaa/bbb/ccc.wav ---> save to aaa/bbb_processed/ccc/ccc_0.wav
+        # Tạo tên audio và thư mục output. Tên thư mục encode các flag quan trọng
+        # để dễ phân biệt kết quả giữa nhiều lần chạy.
         audio_name = audio_name or os.path.splitext(os.path.basename(audio_path))[0]
         suffix = "dia3" if args.dia3 else "ori"
         save_path = save_path or os.path.join(
             os.path.dirname(audio_path), "_final", f"-sepreformer-{args.sepreformer}" +f"-demucs-{args.demucs}"  + f"-vad-{do_vad}"+ f"-diaModel-{suffix}"
-            # initial prompt off or on
+            # Ghi rõ trạng thái bật/tắt initial prompt trong tên thư mục kết quả.
             + f"-initPrompt-{args.initprompt}"
             + f"-merge_gap-{args.merge_gap}" +f"-seg_th-{args.seg_th}"+ f"-cl_min-{args.min_cluster_size}" +f"-cl-th-{args.clust_th}"+ f"-LLM-{LLM}", audio_name
         )
@@ -2530,10 +2701,14 @@ def main_process(audio_path, save_path=None, audio_name=None,
         logger.info(
             "Step 0: Preprocess all audio files --> 24k sample rate + wave format + loudnorm + bit depth 16"
         )
+        # Bước 0b: chuẩn hoá audio về format chung của pipeline.
         audio = standardization(audio_path)
+
+        # Bước 1: chuẩn bị chunk cho diarization. Mỗi chunk có offset để quy đổi
+        # timestamp local của chunk về timestamp toàn file.
         diar_chunks, temp_chunk_dir = prepare_diarization_chunks(audio_path, audio)
 
-        # Calculate total audio duration
+        # Thời lượng audio dùng để tính RT factor cho từng stage.
         audio_duration = len(audio["waveform"]) / audio["sample_rate"]
         logger.info(f"Total audio duration: {audio_duration:.2f} seconds")
 
@@ -2543,6 +2718,8 @@ def main_process(audio_path, save_path=None, audio_name=None,
 
         diarization_frames = []
         try:
+            # Chạy Sortformer trên từng chunk. Output của chunk được cộng offset để
+            # quay về timeline tuyệt đối của file gốc.
             for chunk in diar_chunks:
                 predicted_segments, _ = diar_model.diarize(
                     audio=chunk["path"], batch_size=1, include_tensor_outputs=True
@@ -2556,10 +2733,13 @@ def main_process(audio_path, save_path=None, audio_name=None,
                     )
                 diarization_frames.append(chunk_df)
         finally:
+            # Dọn file chunk tạm sau khi diarization hoàn tất.
             if temp_chunk_dir:
                 shutil.rmtree(temp_chunk_dir, ignore_errors=True)
 
         if diarization_frames:
+            # Sortformer chạy theo chunk nên speaker label chỉ có nghĩa cục bộ.
+            # Bước này dùng embedding để nối label speaker xuyên chunk.
             diarization_frames = align_speakers_across_chunks(
                 diarization_frames,
                 audio_info=audio,
@@ -2570,35 +2750,33 @@ def main_process(audio_path, save_path=None, audio_name=None,
         if diarization_frames:
             speakerdia = pd.concat(diarization_frames, ignore_index=True)
         else:
+            # Trường hợp model không trả segment nào, vẫn tạo DataFrame đúng schema.
             speakerdia = pd.DataFrame(columns=["segment", "label", "speaker", "start", "end"])
         ori_list = df_to_list(speakerdia)
         dia_end = time.time()
 
-        # Calculate VAD + Sortformer RT factor
+        # RT factor = thời gian xử lý / thời lượng audio. <1 nghĩa là nhanh hơn realtime.
         vad_sortformer_processing_time = dia_end - dia_start
         vad_sortformer_rt = vad_sortformer_processing_time / audio_duration if audio_duration > 0 else 0
         logger.info(f"VAD + Sortformer - Processing time: {vad_sortformer_processing_time:.2f}s, RT factor: {vad_sortformer_rt:.4f}")
 
-        # TEST
-        ######################
+        # Chuẩn hoá danh sách segment trước ASR: cắt các đoạn quá dài để ASR ổn định.
         segment_list = ori_list
         segment_list = split_long_segments(segment_list)
-        ######################
 
-        # [Fixed] Execute Step 3 before Step 2.5!
-        # Step 3: Background Music Detection and Removal
-        # Clean the full audio first before running SepReformer.
+        # Bước 3 chạy trước SepReformer: nếu audio có nhạc nền, làm sạch trước để
+        # tách giọng overlap dễ hơn.
         logger.info("Step 3: Background Music Detection and Removal")
-        # Add padding to cover ASR timestamp error margin
+        # Padding giúp Demucs xử lý cả phần nhạc nền sát biên segment.
         audio, segment_demucs_flags = preprocess_segments_with_demucs(segment_list, audio, panns_model=panns_model, use_demucs=use_demucs, padding=0.5)
 
-        # [Fixed] Now run SepReformer with the cleaned audio
-        # Step 2.5: Overlap control using SepReformer
+        # Bước 2.5: sau khi audio đã được làm sạch nhạc nền, tách vùng hai người
+        # nói chồng nhau bằng SepReformer nếu flag được bật.
         logger.info("Step 2.5: Overlap Control with SepReformer")
         separation_time = 0.0
         if use_sepreformer and sepreformer_separator is not None and embedding_model is not None:
             separation_start = time.time()
-            # At this point, audio has already been processed by Demucs.
+            # Tại đây audio đã qua Demucs nếu --demucs bật.
             audio, segment_list = process_overlapping_segments_with_separation(
                 segment_list,
                 audio,
@@ -2609,7 +2787,7 @@ def main_process(audio_path, save_path=None, audio_name=None,
             separation_end = time.time()
             separation_time = separation_end - separation_start
 
-            # Calculate SepReformer RT factor
+            # Tính tốc độ xử lý SepReformer so với realtime.
             separation_rt = separation_time / audio_duration if audio_duration > 0 else 0
             logger.info(f"SepReformer separation - Processing time: {separation_time:.2f}s, RT factor: {separation_rt:.4f}")
         else:
@@ -2617,6 +2795,7 @@ def main_process(audio_path, save_path=None, audio_name=None,
             
         logger.info("Step 4: ASR (Automatic Speech Recognition)")
         if args.ASRMoE:
+            # ASR MoE: chạy Whisper + Parakeet + Canary rồi ROVER vote.
             asr_start = time.time()
 
             asr_result, whisper_time, alignment_time = asr_MoE(
@@ -2632,6 +2811,7 @@ def main_process(audio_path, save_path=None, audio_name=None,
             dia_time = dia_end-dia_start
             asr_time = whisper_time
         else:
+            # ASR thường: chỉ dùng Whisper.
             asr_start = time.time()
 
             asr_result = asr(segment_list, audio)
@@ -2642,14 +2822,15 @@ def main_process(audio_path, save_path=None, audio_name=None,
             asr_time = asr_end-asr_start
             alignment_time = 0.0
 
-        # Calculate Whisper large v3 RT factor
+        # Tính RT factor cho Whisper large-v3.
         whisper_processing_time = asr_time
         whisper_rt = whisper_processing_time / audio_duration if audio_duration > 0 else 0
 
-        # Calculate WhisperX alignment RT factor
+        # Alignment time hiện chỉ có ý nghĩa khi word timestamp được bật.
         alignment_rt = alignment_time / audio_duration if audio_duration > 0 else 0
 
         if LLM == "case_0":
+            # case_0: không hậu xử lý LLM, dùng trực tiếp kết quả ASR.
             print("LLM case_0")
             filtered_list = asr_result
             print(f"ASR result contains {len(filtered_list)} segments")
@@ -2657,9 +2838,8 @@ def main_process(audio_path, save_path=None, audio_name=None,
 
 
 
-        # LLM post diarization start
-        ####################################################################################################
-        # "LLM post-processing"
+        # case_2: nhánh giữ chỗ cho LLM post-processing. Hiện tại các hàm LLM
+        # đang tắt nên dùng trực tiếp ASR result.
         elif LLM == "case_2":
             print(f"asr_result len: {len(asr_result)}")
             print("Warning: llm_inference functions are commented out. Using ASR results directly.")
@@ -2669,10 +2849,7 @@ def main_process(audio_path, save_path=None, audio_name=None,
         else:
             raise ValueError("LLM variable must be one of case_0, case_1, case_2.")
 
-        ############################################################################################################
-            # LLM post diarization end
-
-        # Step 4.5: Add Qwen3-Omni captions (if enabled)
+        # Bước 4.5: thêm caption audio bằng Qwen3-Omni nếu bật.
         caption_time = 0.0
         if args.qwen3omni:
             logger.info("Step 4.5: Adding Qwen3-Omni captions")
@@ -2680,10 +2857,10 @@ def main_process(audio_path, save_path=None, audio_name=None,
         else:
             logger.info("Step 4.5: Qwen3-Omni caption generation skipped (flag disabled)")
 
-        # Calculate Qwen3-Omni RT factor
+        # RT factor cho bước caption.
         caption_rt = caption_time / audio_duration if audio_duration > 0 else 0
 
-        # Print all timing information
+        # In thống kê thời gian để dễ benchmark từng stage.
         print(f"\n{'='*60}")
         print(f"Audio duration: {audio_duration:.2f} seconds ({audio_duration/60:.2f} minutes)")
         print(f"{'='*60}")
@@ -2714,28 +2891,32 @@ def main_process(audio_path, save_path=None, audio_name=None,
 
         logger.info("Step 5: Write result into MP3 and JSON file")
         print(f"Exporting {len(filtered_list)} segments to MP3 and JSON...")
+        # Xuất MP3 từng segment. Nếu segment có enhanced_audio, hàm export sẽ dùng
+        # audio đã xử lý thay vì cắt từ bản gốc.
         export_segments_with_enhanced_audio(audio, filtered_list, save_path, audio_name)
 
-        # Korean G2P post-processing
+        # Hậu xử lý Korean G2P nếu bật.
         if args.korean:
             ko_process_json(filtered_list)
 
+        # JSON không nên chứa numpy array audio lớn. Trước khi dump, xoá
+        # enhanced_audio và chuyển numpy scalar sang kiểu Python native.
         cleaned_list = []
         for item in filtered_list:
-            # Use shallow copy to avoid modifying the original filtered_list
+            # Copy nông để không làm mất enhanced_audio trong filtered_list trả về.
             clean_item = item.copy()
             
-            # 1. Remove 'enhanced_audio' (audio matrix) key if present
+            # Bỏ ma trận audio khỏi JSON output.
             if "enhanced_audio" in clean_item:
                 del clean_item["enhanced_audio"]
-            # 2. (Error prevention) Convert Numpy float/int types to Python native types
+            # json.dump không serialize numpy scalar trực tiếp được.
             for k, v in clean_item.items():
-                if hasattr(v, 'item'):  # If numpy type
+                if hasattr(v, 'item'):  # numpy scalar
                     clean_item[k] = v.item()
                     
             cleaned_list.append(clean_item)
 
-        # Prepare output with RT factor metrics
+        # Chuẩn bị JSON cuối gồm metadata benchmark và danh sách segment.
         output_data = {
             "metadata": {
                 "audio_duration_seconds": audio_duration,
@@ -2748,14 +2929,14 @@ def main_process(audio_path, save_path=None, audio_name=None,
                     "processing_time_seconds": whisper_processing_time,
                     "rt_factor": whisper_rt
                 },
-                # [Fixed] Use cleaned_list length instead of filtered_list
+                # Dùng cleaned_list vì đây là dữ liệu thật sự được ghi ra JSON.
                 "total_segments": len(cleaned_list)
             },
-            # [Fixed] Must use cleaned_list instead of filtered_list here.
+            # Không ghi enhanced_audio vào JSON để tránh file cực lớn.
             "segments": cleaned_list  
         }
 
-        # Add WhisperX alignment metadata if enabled
+        # Gắn metadata cho các stage tuỳ chọn nếu được bật.
         if args.whisperx_word_timestamps:
             output_data["metadata"]["whisperx_alignment"] = {
                 "processing_time_seconds": alignment_time,
@@ -2763,7 +2944,6 @@ def main_process(audio_path, save_path=None, audio_name=None,
                 "enabled": True
             }
 
-        # Add Qwen3-Omni caption metadata if enabled
         if args.qwen3omni:
             output_data["metadata"]["qwen3omni_caption"] = {
                 "processing_time_seconds": caption_time,
@@ -2771,7 +2951,6 @@ def main_process(audio_path, save_path=None, audio_name=None,
                 "enabled": True
             }
 
-        # Add SepReformer separation metadata if enabled
         if use_sepreformer:
             output_data["metadata"]["sepreformer_separation"] = {
                 "processing_time_seconds": separation_time,
@@ -2789,11 +2968,17 @@ def main_process(audio_path, save_path=None, audio_name=None,
         print(f"Total segments processed: {len(filtered_list)}")
         return final_path, filtered_list
     finally:
+        # Xoá thư mục WAV tạm tạo từ OPUS/OGG nếu có.
         if opus_temp_dir:
             shutil.rmtree(opus_temp_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
+    # =============================================================================
+    # Điểm vào CLI
+    # =============================================================================
+    # Phần này đọc tham số dòng lệnh, load toàn bộ model dùng chung, quét thư mục
+    # input và gọi `main_process` cho từng file audio.
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_folder_path",
@@ -2806,7 +2991,7 @@ if __name__ == "__main__":
     )
     
     parser.add_argument("--batch_size", type=int, default=64, help="batch size")
-    # 32 seems reasonable
+    # Kích thước batch chỉ dùng cho các nhánh/model có hỗ trợ batch.
 
     parser.add_argument(
         "--compute_type",
@@ -2851,7 +3036,7 @@ if __name__ == "__main__":
         help="LLM diarization cases",
     )
 
-    # hyperparameter
+    # Siêu tham số cho diarization/segment merging.
     parser.add_argument(
         "--seg_th",
         type=float,
@@ -2939,7 +3124,7 @@ if __name__ == "__main__":
         help="Minimum overlap duration in seconds to trigger SepReformer separation",
     )
 
-    # Sortformer diarization segment boundary adjustment (optional)
+    # Tuỳ chọn chỉnh biên segment Sortformer sau khi model trả output.
     parser.add_argument(
         "--sortformer-param",
         "--sortformerParam",
@@ -2974,18 +3159,21 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Đọc config và khởi tạo logger dùng chung toàn file.
     batch_size = args.batch_size
     cfg = load_cfg(args.config_path)
 
     logger = Logger.get_logger()
 
     if args.input_folder_path:
+        # Tham số CLI có độ ưu tiên cao hơn config.json.
         logger.info(f"Using input folder path: {args.input_folder_path}")
         cfg["entrypoint"]["input_folder_path"] = args.input_folder_path
 
     logger.debug("Loading models...")
 
-    # Load models
+    # Chọn thiết bị chạy model. Nếu không có GPU, ép compute_type về int8 để
+    # Whisper chạy được trên CPU.
     if detect_gpu():
         logger.info("Using GPU")
         device_name = "cuda"
@@ -2994,13 +3182,16 @@ if __name__ == "__main__":
         logger.info("Using CPU")
         device_name = "cpu"
         device = torch.device(device_name)
-        # whisperX expects compute type: int8
+        # WhisperX trên CPU kỳ vọng compute_type là int8.
         logger.info("Overriding the compute type to int8")
         args.compute_type = "int8"
 
     check_env(logger)
 
-    # Speaker Diarization
+    # -------------------------------------------------------------------------
+    # Nạp model diarization
+    # -------------------------------------------------------------------------
+    # Pyannote cần Hugging Face token hợp lệ và quyền truy cập model.
     logger.debug(" * Loading Speaker Diarization Model")
     if not cfg["huggingface_token"].startswith("hf"):
         raise ValueError(
@@ -3026,7 +3217,7 @@ if __name__ == "__main__":
         )
         dia_pipeline.to(device)
 
-        # hyperparameters
+        # Siêu tham số cho pyannote diarization bản cũ.
         dia_pipeline.instantiate({
         "segmentation": {
             "min_duration_off": 0.0, 
@@ -3038,31 +3229,35 @@ if __name__ == "__main__":
             "threshold": args.clust_th   
         }
     })
-    # ASR
+    # -------------------------------------------------------------------------
+    # Nạp model ASR Whisper
+    # -------------------------------------------------------------------------
     logger.debug(" * Loading ASR Model")
 
     if args.initprompt == True:
+        # Initial prompt giúp Whisper nhận diện filler words tốt hơn. Prompt hiện
+        # giữ nhiều ngôn ngữ để giảm khả năng model bỏ sót các từ đệm.
         asr_options_dict = {
             #"log_prob_threshold": -1.0,
             #"no_speech_threshold": 0.6,
             # 生于忧患,死于安乐。岂不快哉?当然,嗯,呃,就,这样,那个,哪个,啊,呀,哎呀,哎哟,唉哇,啧,唷,哟,噫!微斯人,吾谁与归?ええと、あの、ま、そう、ええ。äh, hm, so, tja, halt, eigentlich. euh, quoi, bah, ben, tu vois, tu sais, t'sais, eh bien, du coup. genre, comme, style. 응,어,그,음
 
-            # Original initial prompt (kept for reference)
+            # Prompt gốc được giữ lại làm tham chiếu khi cần so sánh hành vi.
             # "initial_prompt": "ha. heh. Mm, hmm. Mm hm. uh. Uh huh. Mm huh. Uh. hum Uh. Ah. Uh hu. Like. you know. Yeah. I mean. right. Actually. Basically, and right? okay. Alright. Emm. So. Oh. Hoo. Hu. Hoo, hoo. Heah. Ha. Yu. Nah. Uh-huh. No way. Uh-oh. Jeez. Whoa. Dang. Gosh. Duh. Whoops. Phew. Woo. Ugh. Er. Geez. Oh wow. Oh man. Uh yeah. Uh huh. For real?",
 
             #"initial_prompt": "ha. heh. Mm, hmm. uh. "
 
-            # Notes on initial_prompt behavior:
-            # - Without initial_prompt: No ASR gaps, but filler word recognition is poor.
-            # - With original initial_prompt: No ASR gaps, but desired filler word recognition is poor.
-            # - With completely different prompt (removing CJK characters): Occasional ASR gaps.
-            # - Modifying original prompt with only 3 or fewer desired filler words: No ASR gaps while achieving good filler word recognition.
+            # Ghi chú thực nghiệm về initial_prompt:
+            # - Không có initial_prompt: ít bị gap ASR nhưng nhận diện filler word kém.
+            # - Prompt gốc: ít gap nhưng chưa nhận diện đúng filler mong muốn.
+            # - Prompt khác hoàn toàn, bỏ CJK: đôi khi sinh gap ASR.
+            # - Chỉnh prompt gốc và giữ ít filler word hơn: cân bằng tốt hơn.
 
 
             "initial_prompt": "Um. Uh, Ah. Like, you know. I mean, right. Actually. Basically, and right? okay. Alright. Emm. Mm. So. Oh. Hoo hoo.生于忧患,死于安乐。岂不快哉?当然,嗯,呃,就,这样,那个,哪个,啊,呀,哎呀,哎哟,唉哇,啧,唷,哟,噫!微斯人,吾谁与归?ええと、あの、ま、そう、ええ。äh, hm, so, tja, halt, eigentlich. euh, quoi, bah, ben, tu vois, tu sais, t'sais, eh bien, du coup. genre, comme, style. 응,어,그,음.",
 
         }
-        # Add word_timestamps if flag is enabled
+        # Bật word timestamp nếu cần WhisperX alignment.
         if args.whisperx_word_timestamps:
             asr_options_dict["word_timestamps"] = True
 
@@ -3073,13 +3268,13 @@ if __name__ == "__main__":
             threads=args.threads,
             language="en",
 
-        # ASR model options can be modified via default_asr_options in whisper_asr.py.
+        # Các option mặc định khác nằm trong models/whisper_asr.py.
 
             asr_options=asr_options_dict,
         )
     else:
         asr_options_dict = {}
-        # Add word_timestamps if flag is enabled
+        # Nếu tắt initial prompt nhưng vẫn cần word timestamp, chỉ truyền option này.
         if args.whisperx_word_timestamps:
             asr_options_dict["word_timestamps"] = True
 
@@ -3094,28 +3289,31 @@ if __name__ == "__main__":
 
             )
     if args.ASRMoE:
+        # ASR MoE cần thêm Parakeet và Canary bên cạnh Whisper.
         import nemo.collections.asr as nemo_asr
         asr_model_2 = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v2")
 
-        # Load Canary model
+        # Nạp Canary model cho nhánh MoE.
         logger.debug(" * Loading Canary Model")
         canary_model = SALM.from_pretrained('nvidia/canary-qwen-2.5b')
         canary_model = canary_model.to(device)
         canary_model.eval()
         logger.debug(f" * Canary model loaded on {device}")
-        # Client initialization
-    #client = OpenAI(api_key="YOUR_API_KEY")
+        # Client OpenAI từng dùng cho nhánh LLM; hiện không khởi tạo ở đây.
+    # client = OpenAI(api_key="YOUR_API_KEY")
     model_name = "gpt-4.1"
-    # VAD
+
+    # VAD dùng để tìm khoảng lặng khi chia chunk diarization.
     logger.debug(" * Loading VAD Model")
     vad = silero_vad.SileroVAD(device=device)
     
-    # Initialize G2P instance
+    # G2P dùng cho hậu xử lý tiếng Hàn nếu bật --korean.
     G2P = G2p()
 
-    # English segment detection pattern: word groups connected by consecutive alphabets, apostrophes, and spaces
+    # Regex tìm cụm tiếng Anh để chuyển sang phát âm Hàn.
     ENG_PATTERN = re.compile(r"[A-Za-z][A-Za-z']*(?: [A-Za-z][A-Za-z']*)*")
 
+    # Speaker embedder dùng để nối speaker label giữa các chunk diarization.
     speaker_embedder = None
     try:
         speaker_embedder = Inference(
@@ -3129,11 +3327,12 @@ if __name__ == "__main__":
         logger.error(f" * Failed to load speaker embedding model: {e}")
         speaker_embedder = None
 
-    # load model from Hugging Face model card directly (You need a Hugging Face token)
+    # Sortformer là model diarization chính trong flow hiện tại.
     diar_model = SortformerEncLabelModel.from_pretrained("nvidia/diar_sortformer_4spk-v1")
     diar_model.eval()
 
-    # Initialize Pyannote embedding model (only when sepreformer is enabled)
+    # Embedding model phục vụ SepReformer: sau khi tách hai source, dùng embedding
+    # để gán source về đúng speaker.
     embedding_model = None
     if args.sepreformer:
         logger.debug(" * Loading Pyannote Embedding Model")
@@ -3146,7 +3345,7 @@ if __name__ == "__main__":
             logger.error(f" * Failed to load Pyannote Embedding Model: {e}")
             embedding_model = None
 
-    # Initialize SepReformer separator (only when sepreformer is enabled)
+    # Nạp SepReformer chỉ khi cần xử lý đoạn nói chồng.
     sepreformer_separator = None
     if args.sepreformer:
         logger.debug(" * Loading SepReformer Separator Model")
@@ -3160,7 +3359,7 @@ if __name__ == "__main__":
             logger.error(f" * Failed to load SepReformer Separator: {e}")
             sepreformer_separator = None
 
-    # Initialize PANNs model (for background music detection)
+    # PANNs dùng để quyết định segment nào có nhạc nền và cần Demucs.
     panns_model = None
     if args.demucs:
         logger.debug(" * Loading PANNs Model for background music detection")
@@ -3187,22 +3386,21 @@ if __name__ == "__main__":
     if not os.path.exists(input_folder_path):
         raise FileNotFoundError(f"input_folder_path: {input_folder_path} not found")
 
-    # Get only audio files in the specified directory (not recursive)
+    # Quét file audio trực tiếp trong input_folder_path, không recursive.
     audio_extensions = ('.mp3', '.wav', '.flac', '.m4a', '.aac', '.opus', '.ogg')
     audio_paths = []
     
     for file in os.listdir(input_folder_path):
-        # 1. Check for supported extensions
+        # Chỉ nhận extension audio được hỗ trợ.
         if not file.lower().endswith(audio_extensions):
             continue
             
-        # 2. Exclude .temp files
+        # Bỏ file tạm.
         if ".temp" in file:
             continue
             
-        # 3. [Important] Prevent listing files from cache folders (_opus_cache...)
-        # (os.listdir only shows direct children, so folders won't be listed as files,
-        # but this handles the case where input_folder_path itself is a cache folder)
+        # Không cho chạy trực tiếp trên thư mục cache OPUS để tránh xử lý lại file
+        # trung gian như input thật.
         if "_opus_cache" in input_folder_path:
             logger.warning(f"Skipping execution because input path looks like a cache dir: {input_folder_path}")
             sys.exit(0)
@@ -3214,11 +3412,11 @@ if __name__ == "__main__":
     import concurrent.futures
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    # (right after creating audio_paths)
+    # Tiền decode OPUS/OGG hàng loạt để pipeline chính chỉ nhận WAV/format dễ đọc.
     target_sr = int(cfg["entrypoint"]["SAMPLE_RATE"])
     opus_cache_dir = os.path.join(input_folder_path, f"_opus_cache_wav_{target_sr}")
 
-    # Filter opus/ogg files for parallel decoding
+    # Lọc riêng OPUS/OGG để decode song song.
     to_decode = [p for p in audio_paths if p.lower().endswith((".opus", ".ogg"))]
     if to_decode:
         logger.info(f"[OPUS] Pre-decoding {len(to_decode)} files with {args.opus_decode_workers} workers...")
@@ -3241,21 +3439,21 @@ if __name__ == "__main__":
                     src, dst = fut.result()
                     decoded_map[src] = dst
                 except Exception as e:
-                    # [Important fix] Handle exceptions so a single file failure doesn't kill the entire process
+                    # Một file decode lỗi không được làm dừng cả batch.
                     logger.error(f"❌ [OPUS] Failed to decode file, skipping: {e}")
-                    # Failed files are not added to the map, so they will be removed from audio_paths
+                    # File lỗi không được thêm vào decoded_map nên sẽ bị loại ở bước dưới.
 
-        # Replace audio_paths with "converted wav paths"
-        # Swap if in decoded_map (success), exclude from list if .opus but not in map (failed)
+        # Thay OPUS/OGG đã decode thành path WAV cache. File OPUS/OGG decode lỗi
+        # sẽ bị loại khỏi danh sách xử lý.
         new_audio_paths = []
         for p in audio_paths:
             if p in decoded_map:
                 new_audio_paths.append(decoded_map[p])
             elif p.lower().endswith((".opus", ".ogg")):
-                # Opus file not in decoding map means it failed, so exclude it
+                # Không có trong decoded_map nghĩa là decode lỗi.
                 logger.warning(f"Skipping failed file: {p}")
             else:
-                # Keep other files (wav, mp3, etc.) as-is
+                # File không cần decode giữ nguyên.
                 new_audio_paths.append(p)
         
         audio_paths = new_audio_paths
@@ -3266,19 +3464,19 @@ if __name__ == "__main__":
     start_time = time.time()
     start_time = time.time()
     
-    # [Fixed] Count successful file processing
+    # Đếm số file thành công/thất bại để tổng kết cuối batch.
     success_count = 0
     fail_count = 0
 
     for path in audio_paths:
         try:
-            # 1. File size check: skip if less than 1KB as it's likely a corrupted file
+            # Bỏ file quá nhỏ vì thường là file hỏng hoặc chưa ghi xong.
             if os.path.getsize(path) < 1024:
                 logger.warning(f"⚠️ [Skip] File too small ({os.path.getsize(path)} bytes): {path}")
                 fail_count += 1
                 continue
 
-            # 2. Execute main process (with per-file try-except handling)
+            # Xử lý từng file độc lập. Lỗi ở một file sẽ được catch bên dưới.
             main_process(path, do_vad=args.vad, LLM=args.LLM, use_demucs=args.demucs,
                          use_sepreformer=args.sepreformer, overlap_threshold=args.overlap_threshold,
                          sepreformer_separator=sepreformer_separator,
@@ -3289,7 +3487,7 @@ if __name__ == "__main__":
             success_count += 1
 
         except Exception as e:
-            # [Important] Don't stop on single file failure; log error and continue to next file
+            # Không dừng cả batch khi một file lỗi; log rồi xử lý file tiếp theo.
             logger.error(f"❌ [Error] Failed to process file: {path}")
             logger.error(f"   Reason: {e}")
             fail_count += 1
