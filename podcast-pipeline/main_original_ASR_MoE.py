@@ -100,7 +100,7 @@ from itertools import zip_longest
 
 warnings.filterwarnings("ignore")
 
-MIN_SPLIT_SILENCE=0.3
+MIN_SPLIT_SILENCE=1
 
 
 
