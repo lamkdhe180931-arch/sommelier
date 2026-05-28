@@ -1670,6 +1670,7 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
     total_alignment_time = 0.0
     
     rover = RoverEnsembler()
+    nemo_device_for_thread = globals().get("asr_moe_nemo_device", None)
 
     # Hàm phụ chạy Whisper cho một segment. Trả về text, language, word timestamps
     # nếu bật và thời gian xử lý để tính RT factor.
@@ -1703,13 +1704,17 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
             }
         except Exception as e:
             logger.error(f"Whisper failed: {e}")
-            return {"text": "", "language": "en", "words": [], "time": 0.0}
+            return {"text": "", "language": "vi", "words": [], "time": 0.0}
 
     # Hàm phụ chạy Parakeet. API NeMo nhận list audio nên segment được bọc trong list.
     def run_parakeet_task(segment_audio_16k):
         try:
             # Parakeet yêu cầu input dạng list.
-            p_res = asr_model_2.transcribe([segment_audio_16k])
+            if nemo_device_for_thread is not None and torch.cuda.is_available():
+                with torch.cuda.device(nemo_device_for_thread):
+                    p_res = asr_model_2.transcribe([segment_audio_16k])
+            else:
+                p_res = asr_model_2.transcribe([segment_audio_16k])
             
             text_parakeet = ""
             if p_res:
@@ -1734,10 +1739,17 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
                 # Đảm bảo dữ liệu đã flush trước khi Canary đọc file.
                 temp_wav.flush()
                 
-                answer_ids = canary_model.generate(
-                    prompts=[[{"role": "user", "content": f"Transcribe the following: {canary_model.audio_locator_tag}", "audio": [temp_wav.name]}]],
-                    max_new_tokens=128,
-                )
+                if nemo_device_for_thread is not None and torch.cuda.is_available():
+                    with torch.cuda.device(nemo_device_for_thread):
+                        answer_ids = canary_model.generate(
+                            prompts=[[{"role": "user", "content": f"Transcribe the following: {canary_model.audio_locator_tag}", "audio": [temp_wav.name]}]],
+                            max_new_tokens=128,
+                        )
+                else:
+                    answer_ids = canary_model.generate(
+                        prompts=[[{"role": "user", "content": f"Transcribe the following: {canary_model.audio_locator_tag}", "audio": [temp_wav.name]}]],
+                        max_new_tokens=128,
+                    )
                 text_canary = canary_model.tokenizer.ids_to_text(answer_ids[0].cpu())
                 return text_canary
         except Exception as e:
@@ -3014,6 +3026,18 @@ if __name__ == "__main__":
         help="The number of CPU threads to use per worker, e.g. will be multiplied by num workers.",
     )
     parser.add_argument(
+        "--whisper_device_index",
+        type=int,
+        default=0,
+        help="CUDA device index for Whisper/faster-whisper. Ignored on CPU.",
+    )
+    parser.add_argument(
+        "--nemo_device_index",
+        type=int,
+        default=1,
+        help="CUDA device index for Parakeet and Canary when --ASRMoE is enabled. Ignored on CPU.",
+    )
+    parser.add_argument(
         "--exit_pipeline",
         type=bool,
         default=False,
@@ -3188,6 +3212,26 @@ if __name__ == "__main__":
         logger.info("Overriding the compute type to int8")
         args.compute_type = "int8"
 
+    cuda_device_count = torch.cuda.device_count() if device_name == "cuda" else 0
+    whisper_device_index = 0
+    nemo_device = device
+    if device_name == "cuda":
+        if 0 <= args.whisper_device_index < cuda_device_count:
+            whisper_device_index = args.whisper_device_index
+
+        if 0 <= args.nemo_device_index < cuda_device_count:
+            nemo_device_index = args.nemo_device_index
+        else:
+            nemo_device_index = whisper_device_index
+
+        nemo_device = torch.device(f"cuda:{nemo_device_index}")
+        logger.info(
+            "ASR device plan: Whisper on cuda:%s, NeMo ASRMoE models on %s, CUDA devices=%s",
+            whisper_device_index,
+            nemo_device,
+            cuda_device_count,
+        )
+
     check_env(logger)
 
     # -------------------------------------------------------------------------
@@ -3264,11 +3308,12 @@ if __name__ == "__main__":
             asr_options_dict["word_timestamps"] = True
 
         asr_model = whisper_asr.load_asr_model(
-            "large-v3",
+            args.whisper_arch,
             device_name,
+            device_index=whisper_device_index,
             compute_type=args.compute_type,
             threads=args.threads,
-            language="en",
+            language="vi",
 
         # Các option mặc định khác nằm trong models/whisper_asr.py.
 
@@ -3281,12 +3326,13 @@ if __name__ == "__main__":
             asr_options_dict["word_timestamps"] = True
 
         asr_model = whisper_asr.load_asr_model(
-            "large-v3",
+            args.whisper_arch,
             device_name,
+            device_index=whisper_device_index,
             compute_type=args.compute_type,
             threads=args.threads,
 
-            language="en",
+            language="vi",
             asr_options=asr_options_dict if asr_options_dict else None,
 
             )
@@ -3294,13 +3340,16 @@ if __name__ == "__main__":
         # ASR MoE cần thêm Parakeet và Canary bên cạnh Whisper.
         import nemo.collections.asr as nemo_asr
         asr_model_2 = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v2")
+        asr_model_2 = asr_model_2.to(nemo_device)
+        asr_model_2.eval()
 
         # Nạp Canary model cho nhánh MoE.
         logger.debug(" * Loading Canary Model")
         canary_model = SALM.from_pretrained('nvidia/canary-qwen-2.5b')
-        canary_model = canary_model.to(device)
+        canary_model = canary_model.to(nemo_device)
         canary_model.eval()
-        logger.debug(f" * Canary model loaded on {device}")
+        asr_moe_nemo_device = nemo_device
+        logger.debug(f" * NeMo ASRMoE models loaded on {nemo_device}")
         # Client OpenAI từng dùng cho nhánh LLM; hiện không khởi tạo ở đây.
     # client = OpenAI(api_key="YOUR_API_KEY")
     model_name = "gpt-4.1"

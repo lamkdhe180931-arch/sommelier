@@ -26,6 +26,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--whisper_arch", default="large-v3")
     parser.add_argument("--compute_type", default="float16")
     parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument(
+        "--whisper_device_index",
+        type=int,
+        default=0,
+        help="CUDA device index for Whisper/faster-whisper. Ignored on CPU.",
+    )
+    parser.add_argument(
+        "--nemo_device_index",
+        type=int,
+        default=1,
+        help="CUDA device index for Parakeet and Canary when --ASRMoE is enabled. Ignored on CPU.",
+    )
     return parser.parse_args()
 
 
@@ -64,6 +76,27 @@ def main() -> None:
     pipeline.device_name = device_name
     pipeline.device = device
     compute_type = args.compute_type if device_name == "cuda" else "int8"
+    cuda_device_count = pipeline.torch.cuda.device_count() if device_name == "cuda" else 0
+    whisper_device_index = 0
+    nemo_device = device
+    nemo_device_index = None
+
+    if device_name == "cuda":
+        if 0 <= args.whisper_device_index < cuda_device_count:
+            whisper_device_index = args.whisper_device_index
+
+        if 0 <= args.nemo_device_index < cuda_device_count:
+            nemo_device_index = args.nemo_device_index
+        else:
+            nemo_device_index = whisper_device_index
+
+        nemo_device = pipeline.torch.device(f"cuda:{nemo_device_index}")
+        logger.info(
+            "ASR device plan: Whisper on cuda:%s, NeMo ASRMoE models on %s, CUDA devices=%s",
+            whisper_device_index,
+            nemo_device,
+            cuda_device_count,
+        )
 
     sample_rate = int(segment_data.get("sample_rate") or cfg["entrypoint"]["SAMPLE_RATE"])
     audio_info = stage_common.load_audio_info(audio_path, sample_rate)
@@ -84,6 +117,7 @@ def main() -> None:
     pipeline.asr_model = pipeline.whisper_asr.load_asr_model(
         args.whisper_arch,
         device_name,
+        device_index=whisper_device_index,
         compute_type=compute_type,
         threads=args.threads,
         language="vi",
@@ -96,9 +130,12 @@ def main() -> None:
         pipeline.asr_model_2 = nemo_asr.models.ASRModel.from_pretrained(
             model_name="nvidia/parakeet-tdt-0.6b-v2"
         )
+        pipeline.asr_model_2 = pipeline.asr_model_2.to(nemo_device)
+        pipeline.asr_model_2.eval()
         pipeline.canary_model = pipeline.SALM.from_pretrained("nvidia/canary-qwen-2.5b")
-        pipeline.canary_model = pipeline.canary_model.to(device)
+        pipeline.canary_model = pipeline.canary_model.to(nemo_device)
         pipeline.canary_model.eval()
+        pipeline.asr_moe_nemo_device = nemo_device
 
     segment_demucs_flags = segment_data.get("segment_demucs_flags") or [False] * len(segments)
     start_time = time.time()
@@ -153,6 +190,9 @@ def main() -> None:
                 "alignment_processing_time_seconds": alignment_time,
                 "word_timestamps_enabled": bool(args.whisperx_word_timestamps),
                 "device": device_name,
+                "cuda_device_count": cuda_device_count,
+                "whisper_device_index": whisper_device_index if device_name == "cuda" else None,
+                "nemo_device": str(nemo_device) if args.ASRMoE else None,
             },
         },
         out_path,
