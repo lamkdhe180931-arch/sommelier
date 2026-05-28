@@ -9,8 +9,8 @@ import stage_common
 
 
 DEFAULT_INITIAL_PROMPT = (
-    "Um. Uh. Ah. Like, you know. I mean, right. Actually. Basically. "
-    "Okay. Alright. Emm. Mm. So. Oh."
+    "Cuộc trò chuyện podcast tiếng Việt tự nhiên. "
+    "Có thể có các từ đệm như ờ, ừ, à, dạ, vâng, rồi, thì, là."
 )
 
 
@@ -86,7 +86,7 @@ def main() -> None:
         device_name,
         compute_type=compute_type,
         threads=args.threads,
-        language="en",
+        language="vi",
         asr_options=asr_options if asr_options else None,
     )
 

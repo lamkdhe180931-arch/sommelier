@@ -100,7 +100,7 @@ from itertools import zip_longest
 
 warnings.filterwarnings("ignore")
 
-MIN_SPLIT_SILENCE=1
+
 
 
 
@@ -145,10 +145,12 @@ audio_count = 0
 
 # Giới hạn mỗi chunk diarization để tránh model xử lý audio quá dài một lần.
 # Ưu tiên cắt tại khoảng lặng do VAD tìm được để hạn chế cắt ngang câu nói.
-MAX_DIA_CHUNK_DURATION = 2 * 60  # giây; giữ dưới ngưỡng dài để Sortformer ổn định hơn
-MIN_SPLIT_SILENCE = 0.3  # giây im lặng tối thiểu để được chọn làm điểm cắt
+MAX_DIA_CHUNK_DURATION = 3 * 60  # giây; giữ dưới ngưỡng dài để Sortformer ổn định hơn
+MIN_SPLIT_SILENCE = 1  # giây im lặng tối thiểu để được chọn làm điểm cắt
+SILERO_MIN_SILENCE_DURATION_MS = 100
 MIN_EMBED_DURATION = 0.5  # giây; segment ngắn hơn mức này sẽ bỏ qua embedding
 QWEN_3_OMNI_PORT = "11500"
+
 class RoverEnsembler:
     """
     Bộ ensemble ROVER (Recognizer Output Voting Error Reduction).
@@ -1597,7 +1599,7 @@ def asr(vad_segments, audio):
             # Pipeline hiện cố định tiếng Anh. Nếu cần detect theo segment, có thể
             # bật lại dòng detect_language bên dưới.
             # language, prob = asr_model.detect_language(segment_audio_16k)
-            language = "en"
+            language = "vi"
 
             transcribe_result = asr_model.transcribe(
                 segment_audio_16k,
@@ -1682,12 +1684,12 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
             )
             
             text_whisper = ""
-            detected_language = "en"
+            detected_language = "vi"
             words = []
 
             if transcribe_result and "segments" in transcribe_result and len(transcribe_result["segments"]) > 0:
                 text_whisper = " ".join([s["text"] for s in transcribe_result["segments"]]).strip()
-                detected_language = transcribe_result.get("language", "en")
+                detected_language = transcribe_result.get("language", "vi")
                 if enable_word_timestamps:
                     for s in transcribe_result["segments"]:
                         if "words" in s: words.extend(s["words"])
@@ -2222,7 +2224,7 @@ def _build_silence_intervals(waveform, sample_rate, min_silence):
         resampled,
         vad_model.vad_model,
         sampling_rate=silero_vad.SAMPLING_RATE,
-        min_silence_duration_ms=MIN_SPLIT_SILENCE,
+        min_silence_duration_ms=SILERO_MIN_SILENCE_DURATION_MS,
     )
     total_duration = len(waveform) / sample_rate
     if not speech_ts:
