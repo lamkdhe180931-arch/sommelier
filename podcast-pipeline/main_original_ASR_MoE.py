@@ -80,14 +80,13 @@ from utils.tool import (
     calculate_audio_stats,
 )
 from utils.logger import Logger, time_logger
-from models import separate_fast, dnsmos, whisper_asr, silero_vad
+from models import separate_fast, dnsmos, whisper_asr, silero_vad, vietnamese_asr
 import time
 import datetime
 from panns_inference import AudioTagging
 import soundfile as sf
 
 from nemo.collections.asr.models import SortformerEncLabelModel
-from nemo.collections.speechlm2.models import SALM
 
 import json
 import re
@@ -156,8 +155,8 @@ class RoverEnsembler:
     Bộ ensemble ROVER (Recognizer Output Voting Error Reduction).
 
     Ý tưởng:
-    - Nhận nhiều transcript từ các model ASR khác nhau như Whisper, Canary,
-      Parakeet.
+    - Nhận nhiều transcript từ các model ASR khác nhau như Whisper,
+      PhoWhisper và ChunkFormer.
     - Căn chỉnh token giữa các transcript bằng Confusion Network.
     - Bỏ bớt transcript quá lệch và vote từng vị trí token để tạo câu cuối.
     """
@@ -303,7 +302,7 @@ class RoverEnsembler:
         - Vote từng vị trí, đồng thời tránh lặp token cục bộ.
 
         Tham số:
-            transcripts: Kết quả từ nhiều model ASR, ví dụ [whisper, canary, parakeet].
+            transcripts: Kết quả từ nhiều model ASR, ví dụ [whisper, phowhisper, chunkformer].
 
         Trả về:
             Transcript cuối sau ensemble.
@@ -1646,12 +1645,13 @@ import concurrent.futures
 @time_logger
 def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestamps=False, device="cuda"):
     """
-    Chạy ASR MoE cho từng segment bằng ba model: Whisper, Parakeet, Canary.
+    Chạy ASR MoE cho từng segment bằng ba model tiếng Việt: Whisper,
+    PhoWhisper và ChunkFormer.
 
     Quy trình mỗi segment:
     1. Chọn audio tốt nhất (`enhanced_audio` nếu có, nếu không cắt từ waveform gốc).
     2. Resample về 16 kHz.
-    3. Gửi song song vào Whisper, Parakeet và Canary.
+    3. Gửi song song vào Whisper, PhoWhisper và ChunkFormer.
     4. Dùng ROVER để vote transcript cuối.
     5. Gắn metadata và timestamp tuyệt đối để xuất JSON/MP3.
     """
@@ -1670,7 +1670,8 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
     total_alignment_time = 0.0
     
     rover = RoverEnsembler()
-    nemo_device_for_thread = globals().get("asr_moe_nemo_device", None)
+    phowhisper_transcriber = globals().get("phowhisper_model", None)
+    chunkformer_transcriber = globals().get("chunkformer_model", None)
 
     # Hàm phụ chạy Whisper cho một segment. Trả về text, language, word timestamps
     # nếu bật và thời gian xử lý để tính RT factor.
@@ -1706,54 +1707,18 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
             logger.error(f"Whisper failed: {e}")
             return {"text": "", "language": "vi", "words": [], "time": 0.0}
 
-    # Hàm phụ chạy Parakeet. API NeMo nhận list audio nên segment được bọc trong list.
-    def run_parakeet_task(segment_audio_16k):
+    def run_phowhisper_task(segment_audio_16k):
         try:
-            # Parakeet yêu cầu input dạng list.
-            if nemo_device_for_thread is not None and torch.cuda.is_available():
-                with torch.cuda.device(nemo_device_for_thread):
-                    p_res = asr_model_2.transcribe([segment_audio_16k])
-            else:
-                p_res = asr_model_2.transcribe([segment_audio_16k])
-            
-            text_parakeet = ""
-            if p_res:
-                first_result = p_res[0]
-                if isinstance(first_result, str):
-                    text_parakeet = first_result
-                elif hasattr(first_result, 'text'):
-                    text_parakeet = first_result.text
-                else:
-                    text_parakeet = str(first_result)
-            return text_parakeet
+            return vietnamese_asr.transcribe(phowhisper_transcriber, segment_audio_16k)
         except Exception as e:
-            logger.error(f"Parakeet failed: {e}")
+            logger.error(f"PhoWhisper failed: {e}")
             return ""
 
-    # Hàm phụ chạy Canary. Model này thường nhận audio qua file path nên cần ghi WAV tạm.
-    def run_canary_task(segment_audio_16k):
+    def run_chunkformer_task(segment_audio_16k):
         try:
-            # Tạo file WAV tạm riêng cho từng thread để tránh tranh chấp path.
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_wav:
-                sf.write(temp_wav.name, segment_audio_16k, 16000)
-                # Đảm bảo dữ liệu đã flush trước khi Canary đọc file.
-                temp_wav.flush()
-                
-                if nemo_device_for_thread is not None and torch.cuda.is_available():
-                    with torch.cuda.device(nemo_device_for_thread):
-                        answer_ids = canary_model.generate(
-                            prompts=[[{"role": "user", "content": f"Transcribe the following: {canary_model.audio_locator_tag}", "audio": [temp_wav.name]}]],
-                            max_new_tokens=128,
-                        )
-                else:
-                    answer_ids = canary_model.generate(
-                        prompts=[[{"role": "user", "content": f"Transcribe the following: {canary_model.audio_locator_tag}", "audio": [temp_wav.name]}]],
-                        max_new_tokens=128,
-                    )
-                text_canary = canary_model.tokenizer.ids_to_text(answer_ids[0].cpu())
-                return text_canary
+            return vietnamese_asr.transcribe(chunkformer_transcriber, segment_audio_16k)
         except Exception as e:
-            logger.error(f"Canary failed: {e}")
+            logger.error(f"ChunkFormer failed: {e}")
             return ""
     # ThreadPoolExecutor cho phép 3 model chạy gần như đồng thời.
     # Dù Python có GIL, các tác vụ C++/CUDA thường release GIL nên vẫn có ích.
@@ -1794,13 +1759,13 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
 
             # Gửi cùng một segment tới ba model ASR.
             future_whisper = executor.submit(run_whisper_task, segment_audio_16k, dummy_vad)
-            future_parakeet = executor.submit(run_parakeet_task, segment_audio_16k)
-            future_canary = executor.submit(run_canary_task, segment_audio_16k)
+            future_phowhisper = executor.submit(run_phowhisper_task, segment_audio_16k)
+            future_chunkformer = executor.submit(run_chunkformer_task, segment_audio_16k)
 
             # Điểm chờ: đợi đủ ba model trả kết quả trước khi ensemble.
             whisper_res = future_whisper.result()
-            text_parakeet = future_parakeet.result()
-            text_canary = future_canary.result()
+            text_phowhisper = future_phowhisper.result()
+            text_chunkformer = future_chunkformer.result()
 
             # Tách kết quả Whisper để vừa lấy text vừa lấy word timestamp/thời gian.
             text_whisper = whisper_res["text"]
@@ -1809,15 +1774,15 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
             total_whisper_time += whisper_res["time"]
 
             # Bỏ phiếu transcript cuối từ ba nguồn ASR.
-            text_ensemble = rover.align_and_vote([text_whisper, text_canary, text_parakeet])
+            text_ensemble = rover.align_and_vote([text_whisper, text_phowhisper, text_chunkformer])
 
             seg_result = {
                 "start": start_time,
                 "end": end_time,
                 "text": text_ensemble,
                 "text_whisper": text_whisper,
-                "text_parakeet": text_parakeet,
-                "text_canary": text_canary,
+                "text_phowhisper": text_phowhisper,
+                "text_chunkformer": text_chunkformer,
                 "speaker": speaker,
                 "language": detected_language,
                 "demucs": segment_demucs_flags[idx] if idx < len(segment_demucs_flags) else False,
@@ -2809,7 +2774,7 @@ def main_process(audio_path, save_path=None, audio_name=None,
             
         logger.info("Step 4: ASR (Automatic Speech Recognition)")
         if args.ASRMoE:
-            # ASR MoE: chạy Whisper + Parakeet + Canary rồi ROVER vote.
+            # ASR MoE: chạy Whisper + PhoWhisper + ChunkFormer rồi ROVER vote.
             asr_start = time.time()
 
             asr_result, whisper_time, alignment_time = asr_MoE(
@@ -3035,7 +3000,13 @@ if __name__ == "__main__":
         "--nemo_device_index",
         type=int,
         default=1,
-        help="CUDA device index for Parakeet and Canary when --ASRMoE is enabled. Ignored on CPU.",
+        help="Deprecated alias for --vi_asr_device_index.",
+    )
+    parser.add_argument(
+        "--vi_asr_device_index",
+        type=int,
+        default=None,
+        help="CUDA device index for PhoWhisper and ChunkFormer when --ASRMoE is enabled. Ignored on CPU.",
     )
     parser.add_argument(
         "--exit_pipeline",
@@ -3112,7 +3083,7 @@ if __name__ == "__main__":
         "--ASRMoE",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="parakeet",
+        help="Enable Vietnamese ASR ensemble with Whisper, PhoWhisper, and ChunkFormer.",
     )
 
     parser.add_argument(
@@ -3214,21 +3185,22 @@ if __name__ == "__main__":
 
     cuda_device_count = torch.cuda.device_count() if device_name == "cuda" else 0
     whisper_device_index = 0
-    nemo_device = device
+    vi_asr_device = device
+    vi_asr_device_index = args.vi_asr_device_index if args.vi_asr_device_index is not None else args.nemo_device_index
     if device_name == "cuda":
         if 0 <= args.whisper_device_index < cuda_device_count:
             whisper_device_index = args.whisper_device_index
 
-        if 0 <= args.nemo_device_index < cuda_device_count:
-            nemo_device_index = args.nemo_device_index
+        if 0 <= vi_asr_device_index < cuda_device_count:
+            selected_vi_asr_device_index = vi_asr_device_index
         else:
-            nemo_device_index = whisper_device_index
+            selected_vi_asr_device_index = whisper_device_index
 
-        nemo_device = torch.device(f"cuda:{nemo_device_index}")
+        vi_asr_device = torch.device(f"cuda:{selected_vi_asr_device_index}")
         logger.info(
-            "ASR device plan: Whisper on cuda:%s, NeMo ASRMoE models on %s, CUDA devices=%s",
+            "ASR device plan: Whisper on cuda:%s, Vietnamese ASRMoE models on %s, CUDA devices=%s",
             whisper_device_index,
-            nemo_device,
+            vi_asr_device,
             cuda_device_count,
         )
 
@@ -3337,19 +3309,11 @@ if __name__ == "__main__":
 
             )
     if args.ASRMoE:
-        # ASR MoE cần thêm Parakeet và Canary bên cạnh Whisper.
-        import nemo.collections.asr as nemo_asr
-        asr_model_2 = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v2")
-        asr_model_2 = asr_model_2.to(nemo_device)
-        asr_model_2.eval()
-
-        # Nạp Canary model cho nhánh MoE.
-        logger.debug(" * Loading Canary Model")
-        canary_model = SALM.from_pretrained('nvidia/canary-qwen-2.5b')
-        canary_model = canary_model.to(nemo_device)
-        canary_model.eval()
-        asr_moe_nemo_device = nemo_device
-        logger.debug(f" * NeMo ASRMoE models loaded on {nemo_device}")
+        # ASR MoE tiếng Việt: Whisper + PhoWhisper + ChunkFormer.
+        logger.debug(" * Loading Vietnamese ASRMoE Models")
+        phowhisper_model = vietnamese_asr.load_phowhisper_model(device=vi_asr_device)
+        chunkformer_model = vietnamese_asr.load_chunkformer_model(device=vi_asr_device)
+        logger.debug(f" * Vietnamese ASRMoE models loaded on {vi_asr_device}")
         # Client OpenAI từng dùng cho nhánh LLM; hiện không khởi tạo ở đây.
     # client = OpenAI(api_key="YOUR_API_KEY")
     model_name = "gpt-4.1"

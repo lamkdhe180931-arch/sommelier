@@ -36,7 +36,13 @@ def parse_args() -> argparse.Namespace:
         "--nemo_device_index",
         type=int,
         default=1,
-        help="CUDA device index for Parakeet and Canary when --ASRMoE is enabled. Ignored on CPU.",
+        help="Deprecated alias for --vi_asr_device_index.",
+    )
+    parser.add_argument(
+        "--vi_asr_device_index",
+        type=int,
+        default=None,
+        help="CUDA device index for PhoWhisper and ChunkFormer when --ASRMoE is enabled. Ignored on CPU.",
     )
     return parser.parse_args()
 
@@ -78,23 +84,23 @@ def main() -> None:
     compute_type = args.compute_type if device_name == "cuda" else "int8"
     cuda_device_count = pipeline.torch.cuda.device_count() if device_name == "cuda" else 0
     whisper_device_index = 0
-    nemo_device = device
-    nemo_device_index = None
+    vi_asr_device = device
+    vi_asr_device_index = args.vi_asr_device_index if args.vi_asr_device_index is not None else args.nemo_device_index
 
     if device_name == "cuda":
         if 0 <= args.whisper_device_index < cuda_device_count:
             whisper_device_index = args.whisper_device_index
 
-        if 0 <= args.nemo_device_index < cuda_device_count:
-            nemo_device_index = args.nemo_device_index
+        if 0 <= vi_asr_device_index < cuda_device_count:
+            selected_vi_asr_device_index = vi_asr_device_index
         else:
-            nemo_device_index = whisper_device_index
+            selected_vi_asr_device_index = whisper_device_index
 
-        nemo_device = pipeline.torch.device(f"cuda:{nemo_device_index}")
+        vi_asr_device = pipeline.torch.device(f"cuda:{selected_vi_asr_device_index}")
         logger.info(
-            "ASR device plan: Whisper on cuda:%s, NeMo ASRMoE models on %s, CUDA devices=%s",
+            "ASR device plan: Whisper on cuda:%s, Vietnamese ASRMoE models on %s, CUDA devices=%s",
             whisper_device_index,
-            nemo_device,
+            vi_asr_device,
             cuda_device_count,
         )
 
@@ -125,17 +131,8 @@ def main() -> None:
     )
 
     if args.ASRMoE:
-        import nemo.collections.asr as nemo_asr
-
-        pipeline.asr_model_2 = nemo_asr.models.ASRModel.from_pretrained(
-            model_name="nvidia/parakeet-tdt-0.6b-v2"
-        )
-        pipeline.asr_model_2 = pipeline.asr_model_2.to(nemo_device)
-        pipeline.asr_model_2.eval()
-        pipeline.canary_model = pipeline.SALM.from_pretrained("nvidia/canary-qwen-2.5b")
-        pipeline.canary_model = pipeline.canary_model.to(nemo_device)
-        pipeline.canary_model.eval()
-        pipeline.asr_moe_nemo_device = nemo_device
+        pipeline.phowhisper_model = pipeline.vietnamese_asr.load_phowhisper_model(device=vi_asr_device)
+        pipeline.chunkformer_model = pipeline.vietnamese_asr.load_chunkformer_model(device=vi_asr_device)
 
     segment_demucs_flags = segment_data.get("segment_demucs_flags") or [False] * len(segments)
     start_time = time.time()
@@ -192,7 +189,7 @@ def main() -> None:
                 "device": device_name,
                 "cuda_device_count": cuda_device_count,
                 "whisper_device_index": whisper_device_index if device_name == "cuda" else None,
-                "nemo_device": str(nemo_device) if args.ASRMoE else None,
+                "vi_asr_device": str(vi_asr_device) if args.ASRMoE else None,
             },
         },
         out_path,

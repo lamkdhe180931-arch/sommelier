@@ -10,14 +10,13 @@ Includes ROVER ensemble, repetition filtering, and multi-model ASR processing.
 
 import collections
 import time
-import tempfile
 import concurrent.futures
 from typing import List, Tuple, Dict, Any
 from itertools import zip_longest
 from difflib import SequenceMatcher
 import numpy as np
 import librosa
-import soundfile as sf
+from models import vietnamese_asr
 from utils.logger import time_logger
 
 # Logger will be initialized from main module
@@ -44,7 +43,7 @@ class RoverEnsembler:
 
         Args:
             base_tokens: Base token list (e.g., Whisper)
-            candidate_tokens: Token list to align (e.g., Canary/Parakeet)
+            candidate_tokens: Token list to align (e.g., PhoWhisper/ChunkFormer)
 
         Returns:
             List of aligned (base_token, candidate_token) tuples.
@@ -120,7 +119,7 @@ class RoverEnsembler:
         [Updated] Resolves token length difference issues with SequenceMatcher-based alignment.
 
         Args:
-            transcripts: List of transcription results from ASR models (e.g., [whisper, canary, parakeet])
+            transcripts: List of transcription results from ASR models (e.g., [whisper, phowhisper, chunkformer])
 
         Returns:
             Final ensembled transcription result
@@ -371,10 +370,19 @@ def asr(vad_segments, audio, asr_model):
 
 
 @time_logger
-def asr_MoE(vad_segments, audio, asr_model, asr_model_2, canary_model, segment_demucs_flags=None, enable_word_timestamps=False, device="cuda"):
+def asr_MoE(
+    vad_segments,
+    audio,
+    asr_model,
+    phowhisper_model,
+    chunkformer_model,
+    segment_demucs_flags=None,
+    enable_word_timestamps=False,
+    device="cuda",
+):
     """
     Perform Automatic Speech Recognition (ASR) on the VAD segments using MoE with Parallel Execution.
-    [Updated] Runs Whisper, Parakeet, and Canary in parallel using ThreadPoolExecutor.
+    [Updated] Runs Whisper, PhoWhisper, and ChunkFormer in parallel using ThreadPoolExecutor.
     """
     if len(vad_segments) == 0:
         return [], 0.0, 0.0
@@ -425,41 +433,18 @@ def asr_MoE(vad_segments, audio, asr_model, asr_model_2, canary_model, segment_d
             logger.error(f"Whisper failed: {e}")
             return {"text": "", "language": "en", "words": [], "time": 0.0}
 
-    def run_parakeet_task(segment_audio_16k):
+    def run_phowhisper_task(segment_audio_16k):
         try:
-            # Parakeet input requires list
-            p_res = asr_model_2.transcribe([segment_audio_16k])
-
-            text_parakeet = ""
-            if p_res:
-                first_result = p_res[0]
-                if isinstance(first_result, str):
-                    text_parakeet = first_result
-                elif hasattr(first_result, 'text'):
-                    text_parakeet = first_result.text
-                else:
-                    text_parakeet = str(first_result)
-            return text_parakeet
+            return vietnamese_asr.transcribe(phowhisper_model, segment_audio_16k)
         except Exception as e:
-            logger.error(f"Parakeet failed: {e}")
+            logger.error(f"PhoWhisper failed: {e}")
             return ""
 
-    def run_canary_task(segment_audio_16k):
+    def run_chunkformer_task(segment_audio_16k):
         try:
-            # Canary requires a file path usually, creating temp file safely inside thread
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_wav:
-                sf.write(temp_wav.name, segment_audio_16k, 16000)
-                # Ensure write is flushed
-                temp_wav.flush()
-
-                answer_ids = canary_model.generate(
-                    prompts=[[{"role": "user", "content": f"Transcribe the following: {canary_model.audio_locator_tag}", "audio": [temp_wav.name]}]],
-                    max_new_tokens=128,
-                )
-                text_canary = canary_model.tokenizer.ids_to_text(answer_ids[0].cpu())
-                return text_canary
+            return vietnamese_asr.transcribe(chunkformer_model, segment_audio_16k)
         except Exception as e:
-            logger.error(f"Canary failed: {e}")
+            logger.error(f"ChunkFormer failed: {e}")
             return ""
     # ---------------------------------------------
 
@@ -502,16 +487,16 @@ def asr_MoE(vad_segments, audio, asr_model, asr_model_2, canary_model, segment_d
             # Submit Tasks in Parallel
             # ---------------------------------------------------------------------
             future_whisper = executor.submit(run_whisper_task, segment_audio_16k, dummy_vad)
-            future_parakeet = executor.submit(run_parakeet_task, segment_audio_16k)
-            future_canary = executor.submit(run_canary_task, segment_audio_16k)
+            future_phowhisper = executor.submit(run_phowhisper_task, segment_audio_16k)
+            future_chunkformer = executor.submit(run_chunkformer_task, segment_audio_16k)
 
             # ---------------------------------------------------------------------
             # Wait for results (Barrier)
             # ---------------------------------------------------------------------
             # .result() blocks until the future is done
             whisper_res = future_whisper.result()
-            text_parakeet = future_parakeet.result()
-            text_canary = future_canary.result()
+            text_phowhisper = future_phowhisper.result()
+            text_chunkformer = future_chunkformer.result()
 
             # Unpack Whisper results
             text_whisper = whisper_res["text"]
@@ -522,15 +507,15 @@ def asr_MoE(vad_segments, audio, asr_model, asr_model_2, canary_model, segment_d
             # ---------------------------------------------------------------------
             # 5. Ensemble & Result Construction
             # ---------------------------------------------------------------------
-            text_ensemble = rover.align_and_vote([text_whisper, text_canary, text_parakeet])
+            text_ensemble = rover.align_and_vote([text_whisper, text_phowhisper, text_chunkformer])
 
             seg_result = {
                 "start": start_time,
                 "end": end_time,
                 "text": text_ensemble,
                 "text_whisper": text_whisper,
-                "text_parakeet": text_parakeet,
-                "text_canary": text_canary,
+                "text_phowhisper": text_phowhisper,
+                "text_chunkformer": text_chunkformer,
                 "speaker": speaker,
                 "language": detected_language,
                 "demucs": segment_demucs_flags[idx] if idx < len(segment_demucs_flags) else False,

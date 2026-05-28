@@ -29,6 +29,7 @@ contourpy==1.3.2
 ctranslate2==4.4.0
 cycler==0.12.1
 Cython==3.1.2
+chunkformer==1.2.2
 cytoolz==1.0.1
 datasets==4.0.0
 debugpy
