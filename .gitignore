@@ -1,0 +1,42 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local/env config
+.env
+.env.*
+*.local
+
+# Kaggle / pipeline generated outputs
+run_full/
+*_download.zip
+
+# Audio/model processing artifacts
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.aac
+*.ogg
+*.opus
+
+# Logs and temp files
+*.log
+logs/
+tmp/
+temp/
