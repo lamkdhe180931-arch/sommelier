@@ -79,6 +79,7 @@ from utils.tool import (
     check_env,
     calculate_audio_stats,
 )
+from utils.asr_quality import choose_asr_text, should_skip_sepreformer_pair
 from utils.logger import Logger, time_logger
 from models import separate_fast, dnsmos, whisper_asr, silero_vad, vietnamese_asr
 import time
@@ -1344,8 +1345,15 @@ def identify_speaker_with_embedding(audio_segment, sample_rate, reference_embedd
 
 
 @time_logger
-def process_overlapping_segments_with_separation(segment_list, audio, overlap_threshold=1.0,
-                                                 separator=None, embedding_model=None):
+def process_overlapping_segments_with_separation(
+    segment_list,
+    audio,
+    overlap_threshold=1.0,
+    separator=None,
+    embedding_model=None,
+    min_sepreformer_overlap=1.0,
+    min_sepreformer_segment=1.0,
+):
     """
     Xử lý các đoạn nói chồng nhau bằng SepReformer.
 
@@ -1363,6 +1371,8 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
         overlap_threshold: ngưỡng overlap cần xử lý.
         separator: SepReformerSeparator đã load.
         embedding_model: pyannote embedding model đã load.
+        min_sepreformer_overlap: bỏ qua SepReformer nếu vùng overlap ngắn hơn mức này.
+        min_sepreformer_segment: bỏ qua SepReformer nếu một trong hai segment quá ngắn.
     """
     if separator is None:
         logger.warning("SepReformer separator not provided, skipping separation")
@@ -1372,7 +1382,11 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
         logger.warning("Embedding model not provided, skipping separation")
         return audio, segment_list
 
-    logger.info(f"Processing overlapping segments with SepReformer (threshold: {overlap_threshold}s)")
+    logger.info(
+        "Processing overlapping segments with SepReformer "
+        f"(threshold: {overlap_threshold}s, min_overlap: {min_sepreformer_overlap}s, "
+        f"min_segment: {min_sepreformer_segment}s)"
+    )
 
     # Hàm phụ khớp âm lượng để source tách ra không tạo bước nhảy volume khi
     # ghép lại với phần audio gốc của segment.
@@ -1467,6 +1481,25 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
         
         seg1_speaker = seg1['speaker']
         seg2_speaker = seg2['speaker']
+
+        skip_pair, skip_reasons = should_skip_sepreformer_pair(
+            pair,
+            min_overlap_seconds=min_sepreformer_overlap,
+            min_segment_seconds=min_sepreformer_segment,
+        )
+        if skip_pair:
+            skip_payload = {
+                "overlap_start": overlap_start,
+                "overlap_end": overlap_end,
+                "reasons": skip_reasons,
+            }
+            seg1.setdefault("sepreformer_skip_reasons", []).append(skip_payload)
+            seg2.setdefault("sepreformer_skip_reasons", []).append(skip_payload)
+            logger.info(
+                f"Skipping SepReformer overlap {overlap_start:.2f}-{overlap_end:.2f}: "
+                f"{', '.join(skip_reasons)}"
+            )
+            continue
 
         # Cắt vùng audio đang chứa hai speaker nói chồng nhau.
         start_frame = int(overlap_start * sample_rate)
@@ -1643,7 +1676,17 @@ def asr(vad_segments, audio):
 import concurrent.futures
 
 @time_logger
-def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestamps=False, device="cuda"):
+def asr_MoE(
+    vad_segments,
+    audio,
+    segment_demucs_flags=None,
+    enable_word_timestamps=False,
+    device="cuda",
+    asr_quality_guard=True,
+    asr_micro_segment_seconds=0.5,
+    asr_short_segment_seconds=1.0,
+    asr_vi_agreement_threshold=0.75,
+):
     """
     Chạy ASR MoE cho từng segment bằng ba model tiếng Việt: Whisper,
     PhoWhisper và ChunkFormer.
@@ -1653,7 +1696,8 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
     2. Resample về 16 kHz.
     3. Gửi song song vào Whisper, PhoWhisper và ChunkFormer.
     4. Dùng ROVER để vote transcript cuối.
-    5. Gắn metadata và timestamp tuyệt đối để xuất JSON/MP3.
+    5. Chạy guard chống hallucination cho các segment quá ngắn hoặc Whisper outlier.
+    6. Gắn metadata và timestamp tuyệt đối để xuất JSON/MP3.
     """
     if len(vad_segments) == 0:
         return [], 0.0, 0.0
@@ -1775,6 +1819,23 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
 
             # Bỏ phiếu transcript cuối từ ba nguồn ASR.
             text_ensemble = rover.align_and_vote([text_whisper, text_phowhisper, text_chunkformer])
+            quality_decision = choose_asr_text(
+                rover_text=text_ensemble,
+                text_whisper=text_whisper,
+                text_phowhisper=text_phowhisper,
+                text_chunkformer=text_chunkformer,
+                duration_sec=duration_sec,
+                enabled=asr_quality_guard,
+                micro_segment_seconds=asr_micro_segment_seconds,
+                short_segment_seconds=asr_short_segment_seconds,
+                vi_agreement_threshold=asr_vi_agreement_threshold,
+            )
+            text_ensemble = quality_decision["text"]
+            if quality_decision["actions"]:
+                logger.info(
+                    f"ASR quality guard segment {idx} ({start_time:.2f}-{end_time:.2f}s): "
+                    f"{quality_decision['actions']} -> {quality_decision['source']}"
+                )
 
             seg_result = {
                 "start": start_time,
@@ -1787,7 +1848,9 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
                 "language": detected_language,
                 "demucs": segment_demucs_flags[idx] if idx < len(segment_demucs_flags) else False,
                 "is_separated": is_enhanced, 
-                "sepreformer": segment.get("sepreformer", False)
+                "sepreformer": segment.get("sepreformer", False),
+                "asr_quality_source": quality_decision["source"],
+                "asr_quality_actions": quality_decision["actions"],
             }
             
             if is_enhanced:
@@ -2629,6 +2692,8 @@ def main_process(audio_path, save_path=None, audio_name=None,
                  use_demucs = False,
                  use_sepreformer = False,
                  overlap_threshold = 1.0,
+                 min_sepreformer_overlap = 1.0,
+                 min_sepreformer_segment = 1.0,
                  sepreformer_separator = None,
                  embedding_model = None,
                  panns_model = None,
@@ -2761,7 +2826,9 @@ def main_process(audio_path, save_path=None, audio_name=None,
                 audio,
                 overlap_threshold=overlap_threshold,
                 separator=sepreformer_separator,
-                embedding_model=embedding_model
+                embedding_model=embedding_model,
+                min_sepreformer_overlap=min_sepreformer_overlap,
+                min_sepreformer_segment=min_sepreformer_segment,
             )
             separation_end = time.time()
             separation_time = separation_end - separation_start
@@ -2782,7 +2849,11 @@ def main_process(audio_path, save_path=None, audio_name=None,
                 audio,
                 segment_demucs_flags=segment_demucs_flags,
                 enable_word_timestamps=args.whisperx_word_timestamps,
-                device=device_name
+                device=device_name,
+                asr_quality_guard=args.asr_quality_guard,
+                asr_micro_segment_seconds=args.asr_micro_segment_seconds,
+                asr_short_segment_seconds=args.asr_short_segment_seconds,
+                asr_vi_agreement_threshold=args.asr_vi_agreement_threshold,
             )
 
             asr_end = time.time()
@@ -2935,6 +3006,8 @@ def main_process(audio_path, save_path=None, audio_name=None,
                 "processing_time_seconds": separation_time,
                 "rt_factor": separation_rt,
                 "overlap_threshold_seconds": overlap_threshold,
+                "min_sepreformer_overlap_seconds": min_sepreformer_overlap,
+                "min_sepreformer_segment_seconds": min_sepreformer_segment,
                 "enabled": True
             }
 
@@ -3085,6 +3158,30 @@ if __name__ == "__main__":
         default=False,
         help="Enable Vietnamese ASR ensemble with Whisper, PhoWhisper, and ChunkFormer.",
     )
+    parser.add_argument(
+        "--asr_quality_guard",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable conservative ASR post-vote guard for short-segment hallucinations.",
+    )
+    parser.add_argument(
+        "--asr_micro_segment_seconds",
+        type=float,
+        default=0.5,
+        help="Segments shorter than this are treated as micro segments by the ASR quality guard.",
+    )
+    parser.add_argument(
+        "--asr_short_segment_seconds",
+        type=float,
+        default=1.0,
+        help="Segments shorter than this are treated as short segments by the ASR quality guard.",
+    )
+    parser.add_argument(
+        "--asr_vi_agreement_threshold",
+        type=float,
+        default=0.75,
+        help="Similarity threshold for PhoWhisper/ChunkFormer agreement in the ASR quality guard.",
+    )
 
     parser.add_argument(
         "--demucs",
@@ -3119,6 +3216,18 @@ if __name__ == "__main__":
         type=float,
         default=1.0,
         help="Minimum overlap duration in seconds to trigger SepReformer separation",
+    )
+    parser.add_argument(
+        "--min_sepreformer_overlap",
+        type=float,
+        default=1.0,
+        help="Skip SepReformer when an overlap region is shorter than this many seconds.",
+    )
+    parser.add_argument(
+        "--min_sepreformer_segment",
+        type=float,
+        default=1.0,
+        help="Skip SepReformer when either overlapped segment is shorter than this many seconds.",
     )
 
     # Tuỳ chọn chỉnh biên segment Sortformer sau khi model trả output.
@@ -3494,6 +3603,8 @@ if __name__ == "__main__":
             # Xử lý từng file độc lập. Lỗi ở một file sẽ được catch bên dưới.
             main_process(path, do_vad=args.vad, LLM=args.LLM, use_demucs=args.demucs,
                          use_sepreformer=args.sepreformer, overlap_threshold=args.overlap_threshold,
+                         min_sepreformer_overlap=args.min_sepreformer_overlap,
+                         min_sepreformer_segment=args.min_sepreformer_segment,
                          sepreformer_separator=sepreformer_separator,
                          embedding_model=embedding_model, panns_model=panns_model,
                          speaker_embedder=speaker_embedder,

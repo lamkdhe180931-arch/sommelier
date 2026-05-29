@@ -53,6 +53,12 @@ BACKEND_ARGS = [
     "--clust_th", "0.5",
     "--merge_gap", "2",
     "--overlap_threshold", "0.2",
+    "--min_sepreformer_overlap", "1.0",
+    "--min_sepreformer_segment", "1.0",
+    "--asr_quality_guard",
+    "--asr_micro_segment_seconds", "0.5",
+    "--asr_short_segment_seconds", "1.0",
+    "--asr_vi_agreement_threshold", "0.75",
     "--speaker-link-threshold", "0.6",
     "--opus_decode_workers", "20", # Adjust CPU threads allocated per worker
     "--ffmpeg_threads_per_decode", "1"

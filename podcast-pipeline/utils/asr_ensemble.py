@@ -17,6 +17,7 @@ from difflib import SequenceMatcher
 import numpy as np
 import librosa
 from models import vietnamese_asr
+from utils.asr_quality import choose_asr_text
 from utils.logger import time_logger
 
 # Logger will be initialized from main module
@@ -379,6 +380,10 @@ def asr_MoE(
     segment_demucs_flags=None,
     enable_word_timestamps=False,
     device="cuda",
+    asr_quality_guard=True,
+    asr_micro_segment_seconds=0.5,
+    asr_short_segment_seconds=1.0,
+    asr_vi_agreement_threshold=0.75,
 ):
     """
     Perform Automatic Speech Recognition (ASR) on the VAD segments using MoE with Parallel Execution.
@@ -508,6 +513,18 @@ def asr_MoE(
             # 5. Ensemble & Result Construction
             # ---------------------------------------------------------------------
             text_ensemble = rover.align_and_vote([text_whisper, text_phowhisper, text_chunkformer])
+            quality_decision = choose_asr_text(
+                rover_text=text_ensemble,
+                text_whisper=text_whisper,
+                text_phowhisper=text_phowhisper,
+                text_chunkformer=text_chunkformer,
+                duration_sec=duration_sec,
+                enabled=asr_quality_guard,
+                micro_segment_seconds=asr_micro_segment_seconds,
+                short_segment_seconds=asr_short_segment_seconds,
+                vi_agreement_threshold=asr_vi_agreement_threshold,
+            )
+            text_ensemble = quality_decision["text"]
 
             seg_result = {
                 "start": start_time,
@@ -520,7 +537,9 @@ def asr_MoE(
                 "language": detected_language,
                 "demucs": segment_demucs_flags[idx] if idx < len(segment_demucs_flags) else False,
                 "is_separated": is_enhanced,
-                "sepreformer": segment.get("sepreformer", False)
+                "sepreformer": segment.get("sepreformer", False),
+                "asr_quality_source": quality_decision["source"],
+                "asr_quality_actions": quality_decision["actions"],
             }
 
             if is_enhanced:

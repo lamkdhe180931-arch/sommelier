@@ -27,6 +27,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--compute_type", default="float16")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument(
+        "--asr_quality_guard",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable conservative ASR post-vote guard for short-segment hallucinations.",
+    )
+    parser.add_argument(
+        "--asr_micro_segment_seconds",
+        type=float,
+        default=0.5,
+        help="Segments shorter than this are treated as micro segments by the ASR quality guard.",
+    )
+    parser.add_argument(
+        "--asr_short_segment_seconds",
+        type=float,
+        default=1.0,
+        help="Segments shorter than this are treated as short segments by the ASR quality guard.",
+    )
+    parser.add_argument(
+        "--asr_vi_agreement_threshold",
+        type=float,
+        default=0.75,
+        help="Similarity threshold for PhoWhisper/ChunkFormer agreement in the ASR quality guard.",
+    )
+    parser.add_argument(
         "--whisper_device_index",
         type=int,
         default=0,
@@ -143,6 +167,10 @@ def main() -> None:
             segment_demucs_flags=segment_demucs_flags,
             enable_word_timestamps=args.whisperx_word_timestamps,
             device=device_name,
+            asr_quality_guard=args.asr_quality_guard,
+            asr_micro_segment_seconds=args.asr_micro_segment_seconds,
+            asr_short_segment_seconds=args.asr_short_segment_seconds,
+            asr_vi_agreement_threshold=args.asr_vi_agreement_threshold,
         )
     else:
         asr_result = pipeline.asr(segments, audio_info)
@@ -190,6 +218,10 @@ def main() -> None:
                 "cuda_device_count": cuda_device_count,
                 "whisper_device_index": whisper_device_index if device_name == "cuda" else None,
                 "vi_asr_device": str(vi_asr_device) if args.ASRMoE else None,
+                "asr_quality_guard": bool(args.asr_quality_guard),
+                "asr_micro_segment_seconds": args.asr_micro_segment_seconds,
+                "asr_short_segment_seconds": args.asr_short_segment_seconds,
+                "asr_vi_agreement_threshold": args.asr_vi_agreement_threshold,
             },
         },
         out_path,

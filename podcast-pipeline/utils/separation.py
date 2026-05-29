@@ -13,6 +13,7 @@ import librosa
 import torch
 from utils.logger import time_logger
 from utils.diarization import detect_overlapping_segments
+from utils.asr_quality import should_skip_sepreformer_pair
 
 # Logger will be initialized from main module
 logger = None
@@ -227,8 +228,16 @@ def identify_speaker_with_embedding(audio_segment, sample_rate, reference_embedd
 
 
 @time_logger
-def process_overlapping_segments_with_separation(segment_list, audio, overlap_threshold=1.0,
-                                                 separator=None, embedding_model=None, device="cuda"):
+def process_overlapping_segments_with_separation(
+    segment_list,
+    audio,
+    overlap_threshold=1.0,
+    separator=None,
+    embedding_model=None,
+    device="cuda",
+    min_sepreformer_overlap=1.0,
+    min_sepreformer_segment=1.0,
+):
     """
     Process overlapping segments by separating them with SepReformer.
     [Updated] Matches the volume of separated audio to the original overlap audio to prevent volume jumps.
@@ -249,7 +258,11 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
         logger.warning("Embedding model not provided, skipping separation")
         return audio, segment_list
 
-    logger.info(f"Processing overlapping segments with SepReformer (threshold: {overlap_threshold}s)")
+    logger.info(
+        "Processing overlapping segments with SepReformer "
+        f"(threshold: {overlap_threshold}s, min_overlap: {min_sepreformer_overlap}s, "
+        f"min_segment: {min_sepreformer_segment}s)"
+    )
 
     # -------------------------------------------------------------------------
     # [Added] Volume matching helper functions
@@ -399,6 +412,25 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
 
         seg1_speaker = seg1['speaker']
         seg2_speaker = seg2['speaker']
+
+        skip_pair, skip_reasons = should_skip_sepreformer_pair(
+            pair,
+            min_overlap_seconds=min_sepreformer_overlap,
+            min_segment_seconds=min_sepreformer_segment,
+        )
+        if skip_pair:
+            skip_payload = {
+                "overlap_start": overlap_start,
+                "overlap_end": overlap_end,
+                "reasons": skip_reasons,
+            }
+            seg1.setdefault("sepreformer_skip_reasons", []).append(skip_payload)
+            seg2.setdefault("sepreformer_skip_reasons", []).append(skip_payload)
+            logger.info(
+                f"Skipping SepReformer overlap {overlap_start:.2f}-{overlap_end:.2f}: "
+                f"{', '.join(skip_reasons)}"
+            )
+            continue
 
         # Extract overlapping audio (Original Mixture)
         start_frame = int(overlap_start * sample_rate)

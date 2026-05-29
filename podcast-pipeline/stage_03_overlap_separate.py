@@ -16,6 +16,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config_path", default="config.json")
     parser.add_argument("--sepreformer", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--overlap_threshold", type=float, default=0.2)
+    parser.add_argument(
+        "--min_sepreformer_overlap",
+        type=float,
+        default=1.0,
+        help="Skip SepReformer when an overlap region is shorter than this many seconds.",
+    )
+    parser.add_argument(
+        "--min_sepreformer_segment",
+        type=float,
+        default=1.0,
+        help="Skip SepReformer when either overlapped segment is shorter than this many seconds.",
+    )
     parser.add_argument("--sepreformer_path", default="")
     return parser.parse_args()
 
@@ -70,6 +82,8 @@ def main() -> None:
                 overlap_threshold=args.overlap_threshold,
                 separator=separator,
                 embedding_model=embedding_model,
+                min_sepreformer_overlap=args.min_sepreformer_overlap,
+                min_sepreformer_segment=args.min_sepreformer_segment,
             )
         except Exception as exc:
             logger.warning(f"SepReformer stage skipped after load/process failure: {exc}")
@@ -104,6 +118,8 @@ def main() -> None:
                 "enabled": bool(args.sepreformer),
                 "processing_time_seconds": processing_time,
                 "overlap_threshold_seconds": args.overlap_threshold,
+                "min_sepreformer_overlap_seconds": args.min_sepreformer_overlap,
+                "min_sepreformer_segment_seconds": args.min_sepreformer_segment,
             },
         },
         out_segments,
