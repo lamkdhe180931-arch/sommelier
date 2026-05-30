@@ -51,6 +51,23 @@ def parse_args() -> argparse.Namespace:
         help="Similarity threshold for PhoWhisper/ChunkFormer agreement in the ASR quality guard.",
     )
     parser.add_argument(
+        "--asr_context_pad_before",
+        type=float,
+        default=0.0,
+        help="Seconds of audio context to prepend during ASR while keeping original output timestamps.",
+    )
+    parser.add_argument(
+        "--asr_context_pad_after",
+        type=float,
+        default=0.0,
+        help="Seconds of audio context to append during ASR while keeping original output timestamps.",
+    )
+    parser.add_argument(
+        "--whisper_hotwords",
+        default="",
+        help="Optional comma-separated or free-text hotwords passed to faster-whisper.",
+    )
+    parser.add_argument(
         "--whisper_device_index",
         type=int,
         default=0,
@@ -141,6 +158,8 @@ def main() -> None:
     asr_options = {}
     if args.initprompt:
         asr_options["initial_prompt"] = DEFAULT_INITIAL_PROMPT
+    if args.whisper_hotwords.strip():
+        asr_options["hotwords"] = args.whisper_hotwords.strip()
     if args.whisperx_word_timestamps:
         asr_options["word_timestamps"] = True
 
@@ -171,6 +190,8 @@ def main() -> None:
             asr_micro_segment_seconds=args.asr_micro_segment_seconds,
             asr_short_segment_seconds=args.asr_short_segment_seconds,
             asr_vi_agreement_threshold=args.asr_vi_agreement_threshold,
+            asr_context_pad_before=args.asr_context_pad_before,
+            asr_context_pad_after=args.asr_context_pad_after,
         )
     else:
         asr_result = pipeline.asr(segments, audio_info)
@@ -222,6 +243,9 @@ def main() -> None:
                 "asr_micro_segment_seconds": args.asr_micro_segment_seconds,
                 "asr_short_segment_seconds": args.asr_short_segment_seconds,
                 "asr_vi_agreement_threshold": args.asr_vi_agreement_threshold,
+                "asr_context_pad_before": args.asr_context_pad_before,
+                "asr_context_pad_after": args.asr_context_pad_after,
+                "whisper_hotwords": args.whisper_hotwords.strip(),
             },
         },
         out_path,

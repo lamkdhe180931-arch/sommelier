@@ -23,7 +23,7 @@ env/
 *.local
 
 # Kaggle / pipeline generated outputs
-run_full/
+run_full*/
 *_download.zip
 
 # Audio/model processing artifacts

@@ -1686,6 +1686,8 @@ def asr_MoE(
     asr_micro_segment_seconds=0.5,
     asr_short_segment_seconds=1.0,
     asr_vi_agreement_threshold=0.75,
+    asr_context_pad_before=0.0,
+    asr_context_pad_after=0.0,
 ):
     """
     Chạy ASR MoE cho từng segment bằng ba model tiếng Việt: Whisper,
@@ -1716,6 +1718,13 @@ def asr_MoE(
     rover = RoverEnsembler()
     phowhisper_transcriber = globals().get("phowhisper_model", None)
     chunkformer_transcriber = globals().get("chunkformer_model", None)
+
+    def slice_full_audio(start_sec, end_sec):
+        start_frame = max(0, int(round(float(start_sec) * global_sample_rate)))
+        end_frame = min(len(full_waveform), int(round(float(end_sec) * global_sample_rate)))
+        if end_frame <= start_frame:
+            return np.zeros(0, dtype=np.float32)
+        return full_waveform[start_frame:end_frame]
 
     # Hàm phụ chạy Whisper cho một segment. Trả về text, language, word timestamps
     # nếu bật và thời gian xử lý để tính RT factor.
@@ -1773,19 +1782,23 @@ def asr_MoE(
             end_time = segment["end"]
             speaker = segment.get("speaker", "Unknown")
             
-            # Chọn nguồn audio cho segment, giống hàm asr thường.
-            segment_audio = None
+            # Chọn nguồn audio cho segment. ASR có thể nghe thêm context trước/sau
+            # nhưng timestamp xuất ra vẫn giữ start/end gốc.
             is_enhanced = False
+            segment_duration_sec = max(0.0, float(end_time) - float(start_time))
+            pad_before = max(0.0, float(asr_context_pad_before))
+            pad_after = max(0.0, float(asr_context_pad_after))
 
             if "enhanced_audio" in segment:
-                # Segment đã được SepReformer cải thiện.
-                raw_audio = segment["enhanced_audio"]
+                # Segment đã được tách overlap: giữ core enhanced, chỉ lấy context
+                # trước/sau từ full waveform để không mất chữ sát biên.
+                prefix = slice_full_audio(start_time - pad_before, start_time) if pad_before else np.zeros(0, dtype=np.float32)
+                suffix = slice_full_audio(end_time, end_time + pad_after) if pad_after else np.zeros(0, dtype=np.float32)
+                enhanced_core = np.asarray(segment["enhanced_audio"], dtype=np.float32).reshape(-1)
+                raw_audio = np.concatenate([prefix, enhanced_core, suffix]).astype(np.float32)
                 is_enhanced = True
             else:
-                # Dự phòng: cắt trực tiếp từ waveform đầy đủ.
-                start_frame = int(start_time * global_sample_rate)
-                end_frame = int(end_time * global_sample_rate)
-                raw_audio = full_waveform[start_frame:end_frame]
+                raw_audio = slice_full_audio(start_time - pad_before, end_time + pad_after)
             
             # Cả ba model ASR ở đây dùng input 16 kHz.
             if global_sample_rate != 16000:
@@ -1798,8 +1811,8 @@ def asr_MoE(
                 continue
 
             # Dummy VAD cho Whisper vì audio đã là segment cắt sẵn.
-            duration_sec = len(segment_audio_16k) / 16000
-            dummy_vad = [{"start": 0.0, "end": duration_sec}]
+            padded_duration_sec = len(segment_audio_16k) / 16000
+            dummy_vad = [{"start": 0.0, "end": padded_duration_sec}]
 
             # Gửi cùng một segment tới ba model ASR.
             future_whisper = executor.submit(run_whisper_task, segment_audio_16k, dummy_vad)
@@ -1824,7 +1837,7 @@ def asr_MoE(
                 text_whisper=text_whisper,
                 text_phowhisper=text_phowhisper,
                 text_chunkformer=text_chunkformer,
-                duration_sec=duration_sec,
+                duration_sec=segment_duration_sec,
                 enabled=asr_quality_guard,
                 micro_segment_seconds=asr_micro_segment_seconds,
                 short_segment_seconds=asr_short_segment_seconds,
@@ -1851,6 +1864,8 @@ def asr_MoE(
                 "sepreformer": segment.get("sepreformer", False),
                 "asr_quality_source": quality_decision["source"],
                 "asr_quality_actions": quality_decision["actions"],
+                "asr_context_pad_before": pad_before,
+                "asr_context_pad_after": pad_after,
             }
             
             if is_enhanced:
@@ -2854,6 +2869,8 @@ def main_process(audio_path, save_path=None, audio_name=None,
                 asr_micro_segment_seconds=args.asr_micro_segment_seconds,
                 asr_short_segment_seconds=args.asr_short_segment_seconds,
                 asr_vi_agreement_threshold=args.asr_vi_agreement_threshold,
+                asr_context_pad_before=args.asr_context_pad_before,
+                asr_context_pad_after=args.asr_context_pad_after,
             )
 
             asr_end = time.time()
@@ -3181,6 +3198,18 @@ if __name__ == "__main__":
         type=float,
         default=0.75,
         help="Similarity threshold for PhoWhisper/ChunkFormer agreement in the ASR quality guard.",
+    )
+    parser.add_argument(
+        "--asr_context_pad_before",
+        type=float,
+        default=0.0,
+        help="Seconds of audio context to prepend during ASR while keeping original timestamps.",
+    )
+    parser.add_argument(
+        "--asr_context_pad_after",
+        type=float,
+        default=0.0,
+        help="Seconds of audio context to append during ASR while keeping original timestamps.",
     )
 
     parser.add_argument(

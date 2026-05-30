@@ -66,6 +66,33 @@ class StageCommonTests(unittest.TestCase):
 
         self.assertEqual(out_dir, Path("/data/podcast/_staged/sample"))
 
+    def test_postprocess_merges_only_same_speaker_micro_gap_and_marks_backchannel(self):
+        import stage_common
+
+        segments = [
+            {"index": "00000", "start": 0.0, "end": 1.0, "speaker": "SPEAKER_00"},
+            {"index": "00001", "start": 1.2, "end": 2.0, "speaker": "SPEAKER_00"},
+            {"index": "00002", "start": 2.1, "end": 2.45, "speaker": "SPEAKER_01"},
+            {"index": "00003", "start": 2.55, "end": 3.0, "speaker": "SPEAKER_00"},
+        ]
+
+        postprocessed, stats = stage_common.postprocess_diarization_segments(
+            segments,
+            same_speaker_merge_gap=0.3,
+            short_backchannel_seconds=1.0,
+        )
+
+        self.assertEqual(len(postprocessed), 3)
+        self.assertEqual(postprocessed[0]["speaker"], "SPEAKER_00")
+        self.assertEqual(postprocessed[0]["start"], 0.0)
+        self.assertEqual(postprocessed[0]["end"], 2.0)
+        self.assertFalse(postprocessed[0]["is_short_backchannel"])
+        self.assertTrue(postprocessed[1]["is_short_backchannel"])
+        self.assertEqual(postprocessed[1]["train_quality_label"], "short_backchannel_review")
+        self.assertEqual(postprocessed[2]["speaker"], "SPEAKER_00")
+        self.assertEqual(stats["merged_same_speaker_gap_count"], 1)
+        self.assertEqual(stats["short_backchannel_count"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

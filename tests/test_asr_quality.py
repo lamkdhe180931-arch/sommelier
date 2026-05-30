@@ -83,6 +83,36 @@ class ASRQualityTests(unittest.TestCase):
         self.assertEqual(decision["source"], "rover")
         self.assertEqual(decision["actions"], [])
 
+    def test_drops_long_text_on_micro_segment_as_hallucination(self):
+        from utils.asr_quality import choose_asr_text
+
+        decision = choose_asr_text(
+            rover_text="mình nghĩ là chuyện này rất quan trọng",
+            text_whisper="mình nghĩ là chuyện này rất quan trọng",
+            text_phowhisper="ừ",
+            text_chunkformer="",
+            duration_sec=0.22,
+        )
+
+        self.assertEqual(decision["text"], "")
+        self.assertEqual(decision["source"], "quality_guard")
+        self.assertIn("drop_micro_hallucination", decision["actions"])
+
+    def test_replaces_known_confusion_when_vietnamese_models_agree(self):
+        from utils.asr_quality import choose_asr_text
+
+        decision = choose_asr_text(
+            rover_text="thành ra mình không đi nữa",
+            text_whisper="thành ra mình không đi nữa",
+            text_phowhisper="thật ra mình không đi nữa",
+            text_chunkformer="thật ra mình không đi nữa",
+            duration_sec=2.4,
+        )
+
+        self.assertEqual(decision["text"], "thật ra mình không đi nữa")
+        self.assertEqual(decision["source"], "vi_consensus")
+        self.assertIn("replace_known_confusion_with_vi_consensus", decision["actions"])
+
     def test_skips_sepreformer_for_tiny_overlap_or_segment(self):
         from utils.asr_quality import should_skip_sepreformer_pair
 

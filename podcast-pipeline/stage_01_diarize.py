@@ -20,6 +20,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min_cluster_size", type=int, default=11)
     parser.add_argument("--clust_th", type=float, default=0.5)
     parser.add_argument("--merge_gap", type=float, default=2.0)
+    parser.add_argument(
+        "--same_speaker_merge_gap",
+        type=float,
+        default=0.3,
+        help="Merge only adjacent same-speaker segments when the gap is at or below this many seconds.",
+    )
+    parser.add_argument(
+        "--short_backchannel_seconds",
+        type=float,
+        default=1.0,
+        help="Keep but label segments shorter than this as short_backchannel.",
+    )
     parser.add_argument("--speaker-link-threshold", type=float, default=0.6)
     parser.add_argument("--max_segment_duration", type=float, default=30.0)
     parser.add_argument("--sortformer-param", action=argparse.BooleanOptionalAction, default=True)
@@ -120,6 +132,12 @@ def main() -> None:
         pipeline.df_to_list(speakerdia),
         max_duration=args.max_segment_duration,
     )
+    segments, postprocess_stats = stage_common.postprocess_diarization_segments(
+        segments,
+        same_speaker_merge_gap=args.same_speaker_merge_gap,
+        short_backchannel_seconds=args.short_backchannel_seconds,
+        max_segment_duration=args.max_segment_duration,
+    )
     processing_time = time.time() - start_time
 
     stage_common.dump_json(
@@ -137,6 +155,9 @@ def main() -> None:
                 "min_cluster_size": args.min_cluster_size,
                 "clust_th": args.clust_th,
                 "speaker_link_threshold": args.speaker_link_threshold,
+                "same_speaker_merge_gap_seconds": args.same_speaker_merge_gap,
+                "short_backchannel_seconds": args.short_backchannel_seconds,
+                "postprocess": postprocess_stats,
             },
         },
         out_path,

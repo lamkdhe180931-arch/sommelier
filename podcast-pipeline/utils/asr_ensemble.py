@@ -384,6 +384,8 @@ def asr_MoE(
     asr_micro_segment_seconds=0.5,
     asr_short_segment_seconds=1.0,
     asr_vi_agreement_threshold=0.75,
+    asr_context_pad_before=0.0,
+    asr_context_pad_after=0.0,
 ):
     """
     Perform Automatic Speech Recognition (ASR) on the VAD segments using MoE with Parallel Execution.
@@ -404,6 +406,13 @@ def asr_MoE(
     total_alignment_time = 0.0
 
     rover = RoverEnsembler()
+
+    def slice_full_audio(start_sec, end_sec):
+        start_frame = max(0, int(round(float(start_sec) * global_sample_rate)))
+        end_frame = min(len(full_waveform), int(round(float(end_sec) * global_sample_rate)))
+        if end_frame <= start_frame:
+            return np.zeros(0, dtype=np.float32)
+        return full_waveform[start_frame:end_frame]
 
     # --- Helper Functions for Parallel Execution ---
     def run_whisper_task(segment_audio_16k, dummy_vad):
@@ -464,16 +473,19 @@ def asr_MoE(
             speaker = segment.get("speaker", "Unknown")
 
             # 1. Audio Selection Logic
-            segment_audio = None
             is_enhanced = False
+            segment_duration_sec = max(0.0, float(end_time) - float(start_time))
+            pad_before = max(0.0, float(asr_context_pad_before))
+            pad_after = max(0.0, float(asr_context_pad_after))
 
             if "enhanced_audio" in segment:
-                raw_audio = segment["enhanced_audio"]
+                prefix = slice_full_audio(start_time - pad_before, start_time) if pad_before else np.zeros(0, dtype=np.float32)
+                suffix = slice_full_audio(end_time, end_time + pad_after) if pad_after else np.zeros(0, dtype=np.float32)
+                enhanced_core = np.asarray(segment["enhanced_audio"], dtype=np.float32).reshape(-1)
+                raw_audio = np.concatenate([prefix, enhanced_core, suffix]).astype(np.float32)
                 is_enhanced = True
             else:
-                start_frame = int(start_time * global_sample_rate)
-                end_frame = int(end_time * global_sample_rate)
-                raw_audio = full_waveform[start_frame:end_frame]
+                raw_audio = slice_full_audio(start_time - pad_before, end_time + pad_after)
 
             # Resample to 16kHz
             if global_sample_rate != 16000:
@@ -485,8 +497,8 @@ def asr_MoE(
                 continue
 
             # Dummy VAD for Whisper
-            duration_sec = len(segment_audio_16k) / 16000
-            dummy_vad = [{"start": 0.0, "end": duration_sec}]
+            padded_duration_sec = len(segment_audio_16k) / 16000
+            dummy_vad = [{"start": 0.0, "end": padded_duration_sec}]
 
             # ---------------------------------------------------------------------
             # Submit Tasks in Parallel
@@ -518,7 +530,7 @@ def asr_MoE(
                 text_whisper=text_whisper,
                 text_phowhisper=text_phowhisper,
                 text_chunkformer=text_chunkformer,
-                duration_sec=duration_sec,
+                duration_sec=segment_duration_sec,
                 enabled=asr_quality_guard,
                 micro_segment_seconds=asr_micro_segment_seconds,
                 short_segment_seconds=asr_short_segment_seconds,
@@ -540,6 +552,8 @@ def asr_MoE(
                 "sepreformer": segment.get("sepreformer", False),
                 "asr_quality_source": quality_decision["source"],
                 "asr_quality_actions": quality_decision["actions"],
+                "asr_context_pad_before": pad_before,
+                "asr_context_pad_after": pad_after,
             }
 
             if is_enhanced:

@@ -38,6 +38,11 @@ LOW_INFORMATION_SHORT_TOKENS = {
     "thì",
 }
 
+KNOWN_CONFUSION_PAIRS = (
+    ("xướng", "sướng"),
+    ("thành ra", "thật ra"),
+)
+
 
 def strip_accents(text: str) -> str:
     decomposed = unicodedata.normalize("NFD", text)
@@ -96,6 +101,27 @@ def _is_low_information_short_text(text: str) -> bool:
     normalized = normalize_text(text)
     tokens = normalized.split()
     return len(tokens) <= 1 and normalized in LOW_INFORMATION_SHORT_TOKENS
+
+
+def _token_count(text: str) -> int:
+    return len(normalize_text(text).split())
+
+
+def _confusion_consensus_candidate(rover_text: str, text_phowhisper: str, text_chunkformer: str) -> str:
+    pho_norm = normalize_text(text_phowhisper)
+    chunk_norm = normalize_text(text_chunkformer)
+    rover_norm = normalize_text(rover_text)
+    if not pho_norm or pho_norm != chunk_norm or pho_norm == rover_norm:
+        return ""
+
+    for left, right in KNOWN_CONFUSION_PAIRS:
+        for source_phrase, target_phrase in ((left, right), (right, left)):
+            if source_phrase not in rover_norm or target_phrase not in pho_norm:
+                continue
+            candidate = rover_norm.replace(source_phrase, target_phrase)
+            if normalize_text(candidate) == pho_norm:
+                return _clean_candidate(text_phowhisper)
+    return ""
 
 
 def _best_vi_candidate(
@@ -172,6 +198,24 @@ def choose_asr_text(
     rover_is_bad = contains_boilerplate(rover_text) or contains_foreign_script(rover_text)
     whisper_is_bad = contains_boilerplate(text_whisper) or contains_foreign_script(text_whisper)
     rover_follows_whisper = text_similarity(rover_text, text_whisper) >= 0.85
+    micro_long_text = duration_sec < micro_segment_seconds and _token_count(rover_text) >= 5
+
+    confusion_candidate = _confusion_consensus_candidate(rover_text, text_phowhisper, text_chunkformer)
+    if confusion_candidate:
+        return {
+            "text": confusion_candidate,
+            "source": "vi_consensus",
+            "actions": ["replace_known_confusion_with_vi_consensus"],
+        }
+
+    if micro_long_text:
+        if vi_text and vi_agrees:
+            return {
+                "text": vi_text,
+                "source": vi_source,
+                "actions": ["replace_micro_hallucination_with_vi_consensus"],
+            }
+        return {"text": "", "source": "quality_guard", "actions": ["drop_micro_hallucination"]}
 
     if duration_sec < micro_segment_seconds and rover_is_bad and not vi_agrees:
         return {"text": "", "source": "quality_guard", "actions": ["drop_micro_boilerplate"]}

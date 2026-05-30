@@ -66,6 +66,90 @@ def clean_segments_for_json(segments: list[dict[str, Any]]) -> list[dict[str, An
     return [clean_segment_for_json(segment) for segment in segments]
 
 
+def segment_duration(segment: dict[str, Any]) -> float:
+    try:
+        return max(0.0, float(segment.get("end", 0.0)) - float(segment.get("start", 0.0)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _merge_segment_pair(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(left)
+    merged["start"] = min(float(left.get("start", 0.0)), float(right.get("start", 0.0)))
+    merged["end"] = max(float(left.get("end", 0.0)), float(right.get("end", 0.0)))
+    merged["speaker"] = left.get("speaker", right.get("speaker", ""))
+    source_indices: list[str] = []
+    for segment in (left, right):
+        existing = segment.get("source_indices")
+        if isinstance(existing, list):
+            source_indices.extend(str(item) for item in existing)
+        elif segment.get("index") is not None:
+            source_indices.append(str(segment["index"]))
+    if source_indices:
+        merged["source_indices"] = source_indices
+    return merged
+
+
+def postprocess_diarization_segments(
+    segments: list[dict[str, Any]],
+    *,
+    same_speaker_merge_gap: float = 0.3,
+    short_backchannel_seconds: float = 1.0,
+    max_segment_duration: float = 30.0,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """
+    Merge only same-speaker micro gaps and mark short podcast backchannels.
+
+    Different-speaker turns are intentionally preserved because short interjections
+    such as "vâng", "ừ", or "dạ" are useful for full-duplex training.
+    """
+    ordered = sorted((dict(segment) for segment in segments), key=lambda item: (float(item.get("start", 0.0)), float(item.get("end", 0.0))))
+    merged_segments: list[dict[str, Any]] = []
+    merged_count = 0
+
+    for segment in ordered:
+        if not merged_segments:
+            merged_segments.append(segment)
+            continue
+
+        prev = merged_segments[-1]
+        same_speaker = str(prev.get("speaker", "")) == str(segment.get("speaker", ""))
+        gap = float(segment.get("start", 0.0)) - float(prev.get("end", 0.0))
+        merged_duration = max(float(prev.get("end", 0.0)), float(segment.get("end", 0.0))) - min(
+            float(prev.get("start", 0.0)), float(segment.get("start", 0.0))
+        )
+
+        if same_speaker and gap <= same_speaker_merge_gap and merged_duration <= max_segment_duration:
+            merged_segments[-1] = _merge_segment_pair(prev, segment)
+            merged_count += 1
+        else:
+            merged_segments.append(segment)
+
+    short_backchannel_count = 0
+    for idx, segment in enumerate(merged_segments):
+        duration = segment_duration(segment)
+        segment["index"] = normalized_index(idx)
+        segment["duration"] = round(duration, 6)
+        is_short = duration < short_backchannel_seconds
+        segment["is_short_backchannel"] = bool(is_short)
+        if is_short:
+            short_backchannel_count += 1
+            segment.setdefault("train_quality_label", "short_backchannel_review")
+            segment.setdefault("needs_manual_review", True)
+        else:
+            segment.setdefault("train_quality_label", "clean_candidate")
+            segment.setdefault("needs_manual_review", False)
+
+    return merged_segments, {
+        "same_speaker_merge_gap_seconds": same_speaker_merge_gap,
+        "short_backchannel_seconds": short_backchannel_seconds,
+        "input_segment_count": len(segments),
+        "output_segment_count": len(merged_segments),
+        "merged_same_speaker_gap_count": merged_count,
+        "short_backchannel_count": short_backchannel_count,
+    }
+
+
 def load_audio_info(audio_path: str | os.PathLike[str], sample_rate: int) -> dict[str, Any]:
     import numpy as np
     from pydub import AudioSegment
@@ -124,4 +208,3 @@ def audio_segment_from_waveform(waveform, sample_rate: int):
 
 def normalized_index(index: int) -> str:
     return f"{index:05d}"
-
