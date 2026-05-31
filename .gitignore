@@ -17,6 +17,15 @@ __pycache__/
 venv/
 env/
 
+# Node / Next.js
+node_modules/
+.next/
+.next.stale-*/
+out/
+dist/
+*.tsbuildinfo
+run-viewer-next/
+
 # Local/env config
 .env
 .env.*
@@ -64,6 +73,7 @@ temp/
 
 # Experiment/cache outputs
 .cache/
+.run_viewer/
 wandb/
 mlruns/
 lightning_logs/

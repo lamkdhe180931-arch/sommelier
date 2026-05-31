@@ -34,6 +34,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--speaker-link-threshold", type=float, default=0.6)
     parser.add_argument("--max_segment_duration", type=float, default=30.0)
+    parser.add_argument(
+        "--speaker-recluster-threshold",
+        type=float,
+        default=0.75,
+        help="Cosine similarity threshold for merging fragmented speaker IDs globally. Set to 0 to disable.",
+    )
     parser.add_argument("--sortformer-param", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--sortformer-pad-offset", type=float, default=-0.24)
     parser.add_argument("--sortformer-pad-onset", type=float, default=0.0)
@@ -128,6 +134,16 @@ def main() -> None:
     else:
         speakerdia = pd.DataFrame(columns=["segment", "label", "speaker", "start", "end"])
 
+    recluster_stats = {"skipped": True, "reason": "disabled_or_no_embedder"}
+    if args.speaker_recluster_threshold > 0 and speaker_embedder is not None:
+        speakerdia, recluster_stats = pipeline.re_cluster_speakers(
+            speakerdia,
+            audio_info=audio_info,
+            embedder=speaker_embedder,
+            similarity_threshold=args.speaker_recluster_threshold,
+        )
+        print(f"Speaker re-cluster: {recluster_stats.get('input_speakers', '?')} -> {recluster_stats.get('output_speakers', '?')} speakers")
+
     segments = pipeline.split_long_segments(
         pipeline.df_to_list(speakerdia),
         max_duration=args.max_segment_duration,
@@ -157,6 +173,8 @@ def main() -> None:
                 "speaker_link_threshold": args.speaker_link_threshold,
                 "same_speaker_merge_gap_seconds": args.same_speaker_merge_gap,
                 "short_backchannel_seconds": args.short_backchannel_seconds,
+                "speaker_recluster_threshold": args.speaker_recluster_threshold,
+                "speaker_recluster": recluster_stats,
                 "postprocess": postprocess_stats,
             },
         },

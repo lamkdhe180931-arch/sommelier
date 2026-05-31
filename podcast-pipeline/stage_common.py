@@ -214,9 +214,32 @@ def postprocess_diarization_segments(
         duration = segment_duration(segment)
         segment["index"] = normalized_index(idx)
         segment["duration"] = round(duration, 6)
+        
         is_short = duration < short_backchannel_seconds
-        segment["is_short_backchannel"] = bool(is_short)
+        
+        is_real_backchannel = False
         if is_short:
+            speaker = segment.get("speaker")
+            start = float(segment.get("start", 0.0))
+            
+            # Find if the other speaker spoke recently in the conversation
+            other_speaker_active_nearby = False
+            for prev_seg in reversed(merged_segments[:idx]):
+                if prev_seg.get("speaker") != speaker:
+                    gap_to_other = start - float(prev_seg.get("end", 0.0))
+                    if gap_to_other <= 3.0:
+                        other_speaker_active_nearby = True
+                    break
+                
+                # If we encounter the same speaker and the gap is small, they were just pausing their monologue
+                gap_to_same = start - float(prev_seg.get("end", 0.0))
+                if gap_to_same <= 2.0:
+                    break
+            
+            is_real_backchannel = other_speaker_active_nearby
+
+        segment["is_short_backchannel"] = bool(is_real_backchannel)
+        if is_real_backchannel:
             short_backchannel_count += 1
             segment.setdefault("train_quality_label", "short_backchannel_review")
             segment.setdefault("needs_manual_review", True)

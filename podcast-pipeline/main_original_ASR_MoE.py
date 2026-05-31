@@ -2540,6 +2540,132 @@ def align_speakers_across_chunks(
     return aligned_frames
 
 
+def re_cluster_speakers(
+    speakerdia,
+    audio_info,
+    embedder,
+    similarity_threshold=0.75,
+):
+    """
+    Re-cluster fragmented speaker IDs after cross-chunk alignment.
+
+    Diarization models may assign different IDs to the same person across
+    different parts of the audio (e.g. before/after an ad break). This function
+    compares speaker embeddings globally and merges speakers whose embedding
+    cosine similarity exceeds the threshold.
+
+    Speakers are processed in descending order of total duration so that the
+    dominant speaker keeps their ID and smaller fragments merge into them.
+    Speakers with very different voices (ads, intros) will have low similarity
+    and remain separate — they get excluded later by assign_duplex_train_groups.
+
+    Returns (remapped_df, recluster_stats).
+    """
+    if embedder is None or speakerdia is None or speakerdia.empty:
+        return speakerdia, {"skipped": True, "reason": "no_embedder_or_empty"}
+
+    speakers = speakerdia["speaker"].unique().tolist()
+    if len(speakers) <= 1:
+        return speakerdia, {"skipped": True, "reason": "single_speaker"}
+
+    # 1. Per-speaker total duration, sorted descending
+    speaker_durations = {}
+    for sp in speakers:
+        mask = speakerdia["speaker"] == sp
+        speaker_durations[sp] = float(
+            (speakerdia.loc[mask, "end"] - speakerdia.loc[mask, "start"]).sum()
+        )
+    ranked = sorted(speaker_durations.items(), key=lambda x: -x[1])
+
+    # 2. Extract representative embedding per speaker (centroid of longest segments)
+    speaker_embeddings = {}
+    for sp, _ in ranked:
+        mask = speakerdia["speaker"] == sp
+        rows = speakerdia[mask].copy()
+        rows = rows.assign(_dur=rows["end"] - rows["start"])
+        rows = rows.sort_values("_dur", ascending=False)
+
+        embs = []
+        for _, row in rows.head(5).iterrows():
+            emb = _extract_speaker_embedding(
+                audio_info, row["start"], row["end"], embedder=embedder
+            )
+            if emb is not None:
+                embs.append(emb)
+            if len(embs) >= 3:
+                break
+        if embs:
+            speaker_embeddings[sp] = np.mean(embs, axis=0)
+
+    # 3. Greedy clustering: process speakers by descending duration
+    #    The first (longest) speaker always creates a new cluster.
+    #    Subsequent speakers either join an existing cluster if similarity
+    #    is high enough, or create a new one.
+    clusters = {}
+    speaker_to_cluster = {}
+
+    for sp, dur in ranked:
+        emb = speaker_embeddings.get(sp)
+
+        best_cid = None
+        best_sim = -1.0
+        if emb is not None:
+            for cid, cl in clusters.items():
+                if cl["embedding"] is None:
+                    continue
+                sim = _cosine_similarity(emb, cl["embedding"])
+                if sim > best_sim:
+                    best_sim = sim
+                    best_cid = cid
+
+        if best_sim >= similarity_threshold and best_cid is not None:
+            # Merge into existing cluster — update centroid with duration-weighted average
+            cl = clusters[best_cid]
+            old_d = cl["duration"]
+            new_d = old_d + dur
+            if cl["embedding"] is not None and emb is not None:
+                cl["embedding"] = (cl["embedding"] * old_d + emb * dur) / new_d
+            cl["duration"] = new_d
+            cl["members"].append(sp)
+            speaker_to_cluster[sp] = best_cid
+        else:
+            # Create new cluster with this speaker as representative
+            clusters[sp] = {
+                "embedding": emb,
+                "duration": dur,
+                "members": [sp],
+            }
+            speaker_to_cluster[sp] = sp
+
+    # 4. Build mapping and apply
+    mapping = {sp: cid for sp, cid in speaker_to_cluster.items()}
+    merges = {}
+    for cid, cl in clusters.items():
+        if len(cl["members"]) > 1:
+            merged_from = [m for m in cl["members"] if m != cid]
+            merges[cid] = merged_from
+            logger.info(
+                f"Speaker re-cluster: {', '.join(merged_from)} -> {cid} "
+                f"(total {cl['duration']:.1f}s)"
+            )
+
+    stats = {
+        "skipped": False,
+        "input_speakers": len(speakers),
+        "output_speakers": len(clusters),
+        "merges": {k: v for k, v in merges.items()},
+        "similarity_threshold": similarity_threshold,
+        "speaker_durations_before": {sp: round(d, 2) for sp, d in ranked},
+    }
+
+    if merges:
+        result = speakerdia.copy()
+        result["speaker"] = result["speaker"].map(mapping)
+        return result, stats
+
+    return speakerdia, stats
+
+
 def prepare_diarization_chunks(
     audio_path,
     audio_info,
