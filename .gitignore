@@ -25,6 +25,8 @@ env/
 # Kaggle / pipeline generated outputs
 run_full*/
 *_download.zip
+kaggle/working/
+kaggle/input/
 
 # Audio/model processing artifacts
 *.wav
@@ -35,8 +37,34 @@ run_full*/
 *.ogg
 *.opus
 
+# Model/checkpoint artifacts
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.nemo
+*.mar
+checkpoints/
+pretrained/
+pretrained_models/
+model_cache/
+
+# Offline dependency bundles / wheels
+*.whl
+wheels/
+wheelhouse/
+pip_cache/
+
 # Logs and temp files
 *.log
 logs/
 tmp/
 temp/
+
+# Experiment/cache outputs
+.cache/
+wandb/
+mlruns/
+lightning_logs/
+runs/
