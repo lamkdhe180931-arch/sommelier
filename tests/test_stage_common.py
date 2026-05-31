@@ -93,6 +93,32 @@ class StageCommonTests(unittest.TestCase):
         self.assertEqual(stats["merged_same_speaker_gap_count"], 1)
         self.assertEqual(stats["short_backchannel_count"], 2)
 
+    def test_assign_duplex_train_groups_selects_two_main_speakers(self):
+        import stage_common
+
+        segments = [
+            {"index": "00000", "start": 0.0, "end": 10.0, "speaker": "SPEAKER_A"},
+            {"index": "00001", "start": 11.0, "end": 19.0, "speaker": "SPEAKER_B", "has_overlap": True, "is_separated": False},
+            {"index": "00002", "start": 20.0, "end": 23.0, "speaker": "SPEAKER_C"},
+            {"index": "00003", "start": 24.0, "end": 28.0, "speaker": "SPEAKER_B", "separation_status": "low_confidence"},
+            {"index": "00004", "start": 29.0, "end": 34.0, "speaker": "SPEAKER_A", "is_separated": True},
+        ]
+
+        grouped, stats = stage_common.assign_duplex_train_groups(segments, expected_main_speakers=2)
+
+        self.assertEqual(stats["main_speakers"], ["SPEAKER_A", "SPEAKER_B"])
+        self.assertEqual(grouped[0]["duplex_train_group"], "clean_duplex_2speaker")
+        self.assertEqual(grouped[1]["duplex_train_group"], "overlap_review")
+        self.assertEqual(grouped[1]["duplex_group_reason"], "unseparated_overlap")
+        self.assertEqual(grouped[2]["duplex_train_group"], "exclude_or_extra_speaker")
+        self.assertEqual(grouped[2]["duplex_group_reason"], "extra_speaker")
+        self.assertEqual(grouped[3]["duplex_train_group"], "overlap_review")
+        self.assertEqual(grouped[3]["duplex_group_reason"], "low_confidence_overlap")
+        self.assertEqual(grouped[4]["duplex_train_group"], "clean_duplex_2speaker")
+        self.assertEqual(stats["group_counts"]["clean_duplex_2speaker"], 2)
+        self.assertEqual(stats["group_counts"]["overlap_review"], 2)
+        self.assertEqual(stats["group_counts"]["exclude_or_extra_speaker"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

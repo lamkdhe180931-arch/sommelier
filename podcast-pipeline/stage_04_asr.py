@@ -101,6 +101,30 @@ def find_source_segment(result: dict, segments: list[dict], fallback_index: int)
     return None
 
 
+SOURCE_METADATA_KEYS = (
+    "has_overlap",
+    "overlap_count",
+    "overlap_total_seconds",
+    "overlap_regions",
+    "independent_osd_regions",
+    "has_independent_osd_overlap",
+    "needs_manual_review",
+    "exclude_from_clean_train",
+    "train_quality_label",
+    "is_short_backchannel",
+    "is_separated",
+    "separation_method",
+    "separation_status",
+    "separation_replacements",
+    "low_confidence_overlap_count",
+    "overlap_pair_statuses",
+    "duplex_train_group",
+    "duplex_group_reason",
+    "is_main_speaker",
+    "main_speakers",
+)
+
+
 def main() -> None:
     args = parse_args()
     segment_data = stage_common.load_json(args.segments_json)
@@ -209,6 +233,9 @@ def main() -> None:
             clean_result["source_index"] = source.get("index")
             clean_result["source_start"] = source.get("start")
             clean_result["source_end"] = source.get("end")
+            for key in SOURCE_METADATA_KEYS:
+                if key in source:
+                    clean_result[key] = source[key]
             if source.get("enhanced_audio_path"):
                 clean_result["enhanced_audio_path"] = source["enhanced_audio_path"]
                 clean_result["is_separated"] = bool(source.get("is_separated"))

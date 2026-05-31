@@ -73,6 +73,90 @@ def segment_duration(segment: dict[str, Any]) -> float:
         return 0.0
 
 
+DUPLEX_GROUP_CLEAN = "clean_duplex_2speaker"
+DUPLEX_GROUP_REVIEW = "overlap_review"
+DUPLEX_GROUP_EXCLUDE = "exclude_or_extra_speaker"
+DUPLEX_GROUPS = (DUPLEX_GROUP_CLEAN, DUPLEX_GROUP_REVIEW, DUPLEX_GROUP_EXCLUDE)
+
+
+def speaker_duration_totals(segments: list[dict[str, Any]]) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    for segment in segments:
+        speaker = str(segment.get("speaker", "")).strip()
+        if not speaker:
+            continue
+        totals[speaker] = totals.get(speaker, 0.0) + segment_duration(segment)
+    return totals
+
+
+def infer_main_speakers(
+    segments: list[dict[str, Any]],
+    *,
+    expected_main_speakers: int = 2,
+    main_speakers: list[str] | tuple[str, ...] | None = None,
+) -> list[str]:
+    if main_speakers:
+        return [str(speaker) for speaker in main_speakers][:expected_main_speakers]
+
+    totals = speaker_duration_totals(segments)
+    ranked = sorted(totals.items(), key=lambda item: (-item[1], item[0]))
+    return [speaker for speaker, _duration in ranked[:expected_main_speakers]]
+
+
+def duplex_group_for_segment(segment: dict[str, Any], main_speakers: list[str]) -> tuple[str, str]:
+    speaker = str(segment.get("speaker", "")).strip()
+    if speaker not in set(main_speakers):
+        return DUPLEX_GROUP_EXCLUDE, "extra_speaker"
+
+    if str(segment.get("separation_status", "")).strip() == "low_confidence":
+        return DUPLEX_GROUP_REVIEW, "low_confidence_overlap"
+    if int(segment.get("low_confidence_overlap_count") or 0) > 0:
+        return DUPLEX_GROUP_REVIEW, "low_confidence_overlap"
+    if bool(segment.get("has_independent_osd_overlap")):
+        return DUPLEX_GROUP_REVIEW, "independent_osd_overlap"
+    if bool(segment.get("has_overlap")) and not bool(segment.get("is_separated")):
+        return DUPLEX_GROUP_REVIEW, "unseparated_overlap"
+    if bool(segment.get("needs_manual_review")):
+        return DUPLEX_GROUP_REVIEW, "manual_review"
+
+    return DUPLEX_GROUP_CLEAN, "main_speaker_clean"
+
+
+def assign_duplex_train_groups(
+    segments: list[dict[str, Any]],
+    *,
+    expected_main_speakers: int = 2,
+    main_speakers: list[str] | tuple[str, ...] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    resolved_main_speakers = infer_main_speakers(
+        segments,
+        expected_main_speakers=expected_main_speakers,
+        main_speakers=main_speakers,
+    )
+    counts = {group: 0 for group in DUPLEX_GROUPS}
+    grouped: list[dict[str, Any]] = []
+
+    for segment in segments:
+        clean_segment = dict(segment)
+        group, reason = duplex_group_for_segment(clean_segment, resolved_main_speakers)
+        counts[group] += 1
+        clean_segment["duplex_train_group"] = group
+        clean_segment["duplex_group_reason"] = reason
+        clean_segment["is_main_speaker"] = str(clean_segment.get("speaker", "")).strip() in set(resolved_main_speakers)
+        clean_segment["main_speakers"] = resolved_main_speakers
+        grouped.append(clean_segment)
+
+    return grouped, {
+        "expected_main_speakers": expected_main_speakers,
+        "main_speakers": resolved_main_speakers,
+        "speaker_duration_seconds": {
+            speaker: round(duration, 6)
+            for speaker, duration in sorted(speaker_duration_totals(segments).items(), key=lambda item: (-item[1], item[0]))
+        },
+        "group_counts": counts,
+    }
+
+
 def _merge_segment_pair(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
     merged = dict(left)
     merged["start"] = min(float(left.get("start", 0.0)), float(right.get("start", 0.0)))

@@ -13,6 +13,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out_dir", default="", help="Final output directory.")
     parser.add_argument("--audio_name", default="", help="Override output audio name.")
     parser.add_argument("--keep_internal_paths", action="store_true")
+    parser.add_argument(
+        "--partition_by_duplex_group",
+        action="store_true",
+        help="Export segment MP3 files under clean/review/exclude duplex train-group folders.",
+    )
+    parser.add_argument(
+        "--expected_main_speakers",
+        type=int,
+        default=2,
+        help="Number of main speakers to infer when transcript segments do not already contain duplex_train_group.",
+    )
+    parser.add_argument(
+        "--main_speakers",
+        default="",
+        help="Optional comma-separated speaker IDs to use as main speakers instead of duration-based inference.",
+    )
     return parser.parse_args()
 
 
@@ -29,11 +45,28 @@ def main() -> None:
 
     full_audio = AudioSegment.from_file(str(audio_path)).set_channels(1)
     exported_segments = []
+    transcript_segments = transcript["segments"]
+    grouping_stats = transcript.get("metadata", {}).get("duplex_train_grouping", {})
 
-    for idx, segment in enumerate(transcript["segments"]):
+    if args.partition_by_duplex_group and any("duplex_train_group" not in segment for segment in transcript_segments):
+        configured_main_speakers = [item.strip() for item in args.main_speakers.split(",") if item.strip()] or None
+        transcript_segments, grouping_stats = stage_common.assign_duplex_train_groups(
+            transcript_segments,
+            expected_main_speakers=args.expected_main_speakers,
+            main_speakers=configured_main_speakers,
+        )
+
+    for idx, segment in enumerate(transcript_segments):
         seg_index = segment.get("index") or stage_common.normalized_index(idx)
         speaker = segment.get("speaker", "Unknown")
-        out_file = segments_dir / f"{seg_index}_{speaker}.mp3"
+        if args.partition_by_duplex_group:
+            group = str(segment.get("duplex_train_group") or stage_common.DUPLEX_GROUP_EXCLUDE)
+            if group not in stage_common.DUPLEX_GROUPS:
+                group = stage_common.DUPLEX_GROUP_EXCLUDE
+            out_file = segments_dir / group / f"{seg_index}_{speaker}.mp3"
+        else:
+            out_file = segments_dir / f"{seg_index}_{speaker}.mp3"
+        out_file.parent.mkdir(parents=True, exist_ok=True)
 
         enhanced_path = segment.get("enhanced_audio_path")
         target_audio = None
@@ -64,6 +97,28 @@ def main() -> None:
     metadata = dict(transcript.get("metadata", {}))
     metadata["exported_segment_count"] = len(exported_segments)
     metadata["export_audio_path"] = str(audio_path)
+    if args.partition_by_duplex_group:
+        group_counts = {group: 0 for group in stage_common.DUPLEX_GROUPS}
+        for segment in exported_segments:
+            group = segment.get("duplex_train_group") or stage_common.DUPLEX_GROUP_EXCLUDE
+            if group not in group_counts:
+                group = stage_common.DUPLEX_GROUP_EXCLUDE
+            group_counts[group] += 1
+        if not grouping_stats:
+            main_speakers = []
+            for segment in exported_segments:
+                segment_main_speakers = segment.get("main_speakers")
+                if isinstance(segment_main_speakers, list) and segment_main_speakers:
+                    main_speakers = [str(speaker) for speaker in segment_main_speakers]
+                    break
+            grouping_stats = {
+                "expected_main_speakers": args.expected_main_speakers,
+                "main_speakers": main_speakers,
+                "group_counts": group_counts,
+            }
+        metadata["partition_by_duplex_group"] = True
+        metadata["duplex_train_grouping"] = grouping_stats
+        metadata["duplex_train_group_counts"] = group_counts
 
     final_data = {
         "metadata": metadata,
