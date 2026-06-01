@@ -43,7 +43,10 @@ Run from `podcast-pipeline` after installing dependencies and setting
 
 ```bash
 python stage_01_diarize.py \
-  --input_audio /kaggle/working/run_full/00_input/full.wav
+  --input_audio /kaggle/working/run_full/00_input/full.wav \
+  --sortformer-pad-onset -0.05 \
+  --sortformer-pad-offset 0.15 \
+  --sortformer-soft-label-thres 0.15
 ```
 
 For a low-VRAM first run, skip Demucs:

@@ -138,6 +138,20 @@ def _apply_sortformer_segment_padding_from_args(
     df["end"] = df[["start", "end"]].max(axis=1)
 
     return df
+
+
+def apply_sortformer_backchannel_tuning(model, *, soft_label_threshold: float, logger) -> bool:
+    if soft_label_threshold <= 0:
+        return False
+
+    cfg = getattr(model, "cfg", None)
+    if cfg is None or not hasattr(cfg, "soft_label_thres"):
+        logger.warning("Sortformer cfg.soft_label_thres not found; backchannel sensitivity tuning skipped.")
+        return False
+
+    cfg.soft_label_thres = float(soft_label_threshold)
+    logger.info("Sortformer cfg.soft_label_thres set to %.3f for backchannel recall.", cfg.soft_label_thres)
+    return True
 # =============================================================================
 # Hằng số dùng xuyên suốt pipeline
 # =============================================================================
@@ -3397,13 +3411,19 @@ if __name__ == "__main__":
     )
     parser.add_argument( "--sortformer-pad-offset", 
                         type=float, 
-                        default=-0.24, 
-                        help="Seconds to add to segment end time (negative pulls ends earlier). Used with --sortformer-param.", )
+                        default=0.15, 
+                        help="Seconds to add to segment end time. Positive values preserve short backchannel tails. Used with --sortformer-param.", )
     
     parser.add_argument( "--sortformer-pad-onset", 
                         type=float, 
-                        default=0.0, 
-                        help="Seconds to add to segment start time (negative pulls starts earlier). Used with --sortformer-param.", )
+                        default=-0.05, 
+                        help="Seconds to add to segment start time. Negative values preserve short backchannel onsets. Used with --sortformer-param.", )
+    parser.add_argument(
+        "--sortformer-soft-label-thres",
+        type=float,
+        default=0.15,
+        help="Set Sortformer cfg.soft_label_thres in this process. Use <= 0 to leave model default unchanged.",
+    )
     
     parser.add_argument(
     "--opus_decode_workers",
@@ -3608,6 +3628,11 @@ if __name__ == "__main__":
 
     # Sortformer là model diarization chính trong flow hiện tại.
     diar_model = SortformerEncLabelModel.from_pretrained("nvidia/diar_sortformer_4spk-v1")
+    apply_sortformer_backchannel_tuning(
+        diar_model,
+        soft_label_threshold=args.sortformer_soft_label_thres,
+        logger=logger,
+    )
     diar_model.eval()
 
     # Embedding model phục vụ SepReformer: sau khi tách hai source, dùng embedding

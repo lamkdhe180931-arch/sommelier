@@ -11,7 +11,12 @@ import pandas as pd
 import stage_common
 
 
-def parse_args() -> argparse.Namespace:
+DEFAULT_SORTFORMER_PAD_ONSET = -0.05
+DEFAULT_SORTFORMER_PAD_OFFSET = 0.15
+DEFAULT_SORTFORMER_SOFT_LABEL_THRES = 0.15
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Stage 01: run diarization and save segments JSON.")
     parser.add_argument("--input_audio", required=True, help="Input audio file path.")
     parser.add_argument("--out", default="", help="Output diarization JSON path.")
@@ -41,9 +46,41 @@ def parse_args() -> argparse.Namespace:
         help="Cosine similarity threshold for merging fragmented speaker IDs globally. Set to 0 to disable.",
     )
     parser.add_argument("--sortformer-param", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--sortformer-pad-offset", type=float, default=-0.24)
-    parser.add_argument("--sortformer-pad-onset", type=float, default=0.0)
-    return parser.parse_args()
+    parser.add_argument(
+        "--sortformer-pad-offset",
+        type=float,
+        default=DEFAULT_SORTFORMER_PAD_OFFSET,
+        help="Seconds to add to segment end time. Positive values preserve short backchannel tails.",
+    )
+    parser.add_argument(
+        "--sortformer-pad-onset",
+        type=float,
+        default=DEFAULT_SORTFORMER_PAD_ONSET,
+        help="Seconds to add to segment start time. Negative values preserve short backchannel onsets.",
+    )
+    parser.add_argument(
+        "--sortformer-soft-label-thres",
+        type=float,
+        default=DEFAULT_SORTFORMER_SOFT_LABEL_THRES,
+        help="Set Sortformer cfg.soft_label_thres in this process. Use <= 0 to leave model default unchanged.",
+    )
+    return parser.parse_args(argv)
+
+
+def apply_sortformer_backchannel_tuning(model, *, soft_label_threshold: float, logger) -> bool:
+    if soft_label_threshold <= 0:
+        return False
+
+    cfg = getattr(model, "cfg", None)
+    if cfg is None or not hasattr(cfg, "soft_label_thres"):
+        if logger is not None:
+            logger.warning("Sortformer cfg.soft_label_thres not found; backchannel sensitivity tuning skipped.")
+        return False
+
+    cfg.soft_label_thres = float(soft_label_threshold)
+    if logger is not None:
+        logger.info("Sortformer cfg.soft_label_thres set to %.3f for backchannel recall.", cfg.soft_label_thres)
+    return True
 
 
 def main() -> None:
@@ -87,6 +124,11 @@ def main() -> None:
         logger.warning("Hugging Face token is not configured; cross-chunk linking skipped.")
 
     diar_model = pipeline.SortformerEncLabelModel.from_pretrained("nvidia/diar_sortformer_4spk-v1")
+    sortformer_tuning_applied = apply_sortformer_backchannel_tuning(
+        diar_model,
+        soft_label_threshold=args.sortformer_soft_label_thres,
+        logger=logger,
+    )
     try:
         diar_model = diar_model.to(device)
     except Exception:
@@ -173,6 +215,10 @@ def main() -> None:
                 "speaker_link_threshold": args.speaker_link_threshold,
                 "same_speaker_merge_gap_seconds": args.same_speaker_merge_gap,
                 "short_backchannel_seconds": args.short_backchannel_seconds,
+                "sortformer_pad_onset_seconds": args.sortformer_pad_onset,
+                "sortformer_pad_offset_seconds": args.sortformer_pad_offset,
+                "sortformer_soft_label_thres": args.sortformer_soft_label_thres,
+                "sortformer_backchannel_tuning_applied": sortformer_tuning_applied,
                 "speaker_recluster_threshold": args.speaker_recluster_threshold,
                 "speaker_recluster": recluster_stats,
                 "postprocess": postprocess_stats,

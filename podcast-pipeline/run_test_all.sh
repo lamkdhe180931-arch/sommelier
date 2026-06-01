@@ -74,9 +74,11 @@ speaker_link_thresholds=(0.6)
 # 0.5 and 2 produce the same results.
 merge_gaps=(2)
 
-# Sortformer segment boundary adjustment (end time -0.08s)
+# Sortformer segment boundary adjustment for short backchannel recall.
 sortformer_param_flags=(--sortformer-param)
-sortformer_pad_offset_values=(-0.24)
+sortformer_pad_onset_values=(-0.05)
+sortformer_pad_offset_values=(0.15)
+sortformer_soft_label_thres_values=(0.15)
 
 for folder in "${folders[@]}"; do
   for vad in "${vad_flags[@]}"; do
@@ -94,22 +96,28 @@ for folder in "${folders[@]}"; do
                           for sepreformer in "${sepreformer_flags[@]}"; do
                             for overlap_th in "${overlap_thresholds[@]}"; do
                               for speaker_link_th in "${speaker_link_thresholds[@]}"; do
-                                for sortformer_pad_offset in "${sortformer_pad_offset_values[@]}"; do
-                                  echo "▶ Folder: ${folder}, ${vad}, ${dia3}, ${initprompt}, LLM=${llm}, seg_th=${seg}, min_cluster_size=${min_cluster}, clust_th=${clust}, merge_gap=${merge_gap}, ${asrmoe}, ${demucs}, ${whisperx}, ${qwen3omni}, ${sepreformer}, ${sortformer_param_flags[*]}, sortformer_pad_offset=${sortformer_pad_offset}, overlap_th=${overlap_th}, speaker_link_th=${speaker_link_th}, korean=${korean}"
-                                  /mnt/fr20tb/kyudan/miniforge3/envs/dataset/bin/python main_original_ASR_MoE.py \
-                                    --input_folder_path "${folder}" \
-                                    ${vad} ${dia3} ${initprompt} ${asrmoe} ${demucs} ${whisperx} ${qwen3omni} ${sepreformer} \
-                                    ${sortformer_param_flags[@]} \
-                                    --sortformer-pad-offset "${sortformer_pad_offset}" \
-                                    --LLM "${llm}" \
-                                    --seg_th "${seg}" \
-                                    --min_cluster_size "${min_cluster}" \
-                                    --clust_th "${clust}" \
-                                    --merge_gap "${merge_gap}" \
-                                    --overlap_threshold "${overlap_th}" \
-                                    --speaker-link-threshold "${speaker_link_th}"\
-                                    --opus_decode_workers 16\
-                                    --ffmpeg_threads_per_decode 1
+	                                for sortformer_pad_onset in "${sortformer_pad_onset_values[@]}"; do
+	                                  for sortformer_pad_offset in "${sortformer_pad_offset_values[@]}"; do
+	                                    for sortformer_soft_label_thres in "${sortformer_soft_label_thres_values[@]}"; do
+	                                      echo "▶ Folder: ${folder}, ${vad}, ${dia3}, ${initprompt}, LLM=${llm}, seg_th=${seg}, min_cluster_size=${min_cluster}, clust_th=${clust}, merge_gap=${merge_gap}, ${asrmoe}, ${demucs}, ${whisperx}, ${qwen3omni}, ${sepreformer}, ${sortformer_param_flags[*]}, sortformer_pad_onset=${sortformer_pad_onset}, sortformer_pad_offset=${sortformer_pad_offset}, sortformer_soft_label_thres=${sortformer_soft_label_thres}, overlap_th=${overlap_th}, speaker_link_th=${speaker_link_th}, korean=${korean}"
+	                                      /mnt/fr20tb/kyudan/miniforge3/envs/dataset/bin/python main_original_ASR_MoE.py \
+	                                        --input_folder_path "${folder}" \
+	                                        ${vad} ${dia3} ${initprompt} ${asrmoe} ${demucs} ${whisperx} ${qwen3omni} ${sepreformer} \
+	                                        ${sortformer_param_flags[@]} \
+	                                        --sortformer-pad-onset "${sortformer_pad_onset}" \
+	                                        --sortformer-pad-offset "${sortformer_pad_offset}" \
+	                                        --sortformer-soft-label-thres "${sortformer_soft_label_thres}" \
+	                                        --LLM "${llm}" \
+	                                        --seg_th "${seg}" \
+	                                        --min_cluster_size "${min_cluster}" \
+	                                        --clust_th "${clust}" \
+	                                        --merge_gap "${merge_gap}" \
+	                                        --overlap_threshold "${overlap_th}" \
+	                                        --speaker-link-threshold "${speaker_link_th}"\
+	                                        --opus_decode_workers 16\
+	                                        --ffmpeg_threads_per_decode 1
+                                    done
+                                  done
                                 done
                               done
                             done
