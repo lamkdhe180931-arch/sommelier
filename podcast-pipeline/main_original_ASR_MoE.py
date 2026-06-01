@@ -128,6 +128,10 @@ def _apply_sortformer_segment_padding_from_args(
     if pad_onset == 0.0 and pad_offset == 0.0:
         return df
 
+    if getattr(args, "_logged_sortformer_pad", None) != True:
+        logger.info(f"Applying Sortformer padding -> pad_onset: {pad_onset}, pad_offset: {pad_offset}")
+        setattr(args, "_logged_sortformer_pad", True)
+
     df = df.copy()
     df["start"] = (df["start"].astype(float) + pad_onset).clip(lower=0.0)
     df["end"] = df["end"].astype(float) + pad_offset
@@ -2984,6 +2988,10 @@ def main_process(audio_path, save_path=None, audio_name=None,
                             min_duration_on = float(getattr(args, "min_duration_on", 0.42))
                             min_duration_off = float(getattr(args, "min_duration_off", 0.34))
                             
+                            if getattr(args, "_logged_custom_binarize", None) != True:
+                                logger.info(f"Applying custom binarize with params -> onset: {onset}, offset: {offset}, min_on: {min_duration_on}, min_off: {min_duration_off}")
+                                setattr(args, "_logged_custom_binarize", True)
+                                
                             custom_segments = custom_binarize(probs, frame_shift, onset, offset, min_duration_on, min_duration_off)
                             chunk_df = pd.DataFrame(custom_segments)
                             
