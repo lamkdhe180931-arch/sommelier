@@ -41,8 +41,13 @@ def parse_args() -> argparse.Namespace:
         help="Cosine similarity threshold for merging fragmented speaker IDs globally. Set to 0 to disable.",
     )
     parser.add_argument("--sortformer-param", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--sortformer-pad-offset", type=float, default=-0.24)
-    parser.add_argument("--sortformer-pad-onset", type=float, default=0.0)
+    parser.add_argument("--sortformer-pad-offset", type=float, default=0.01)
+    parser.add_argument("--sortformer-pad-onset", type=float, default=0.23)
+    parser.add_argument("--onset", type=float, default=0.53)
+    parser.add_argument("--offset", type=float, default=0.49)
+    parser.add_argument("--min-duration-on", type=float, default=0.42)
+    parser.add_argument("--min-duration-off", type=float, default=0.34)
+    parser.add_argument("--use-custom-binarize", action=argparse.BooleanOptionalAction, default=True)
     return parser.parse_args()
 
 
@@ -62,6 +67,11 @@ def main() -> None:
         sortformer_param=args.sortformer_param,
         sortformer_pad_offset=args.sortformer_pad_offset,
         sortformer_pad_onset=args.sortformer_pad_onset,
+        onset=args.onset,
+        offset=args.offset,
+        min_duration_on=args.min_duration_on,
+        min_duration_off=args.min_duration_off,
+        use_custom_binarize=args.use_custom_binarize,
     )
 
     device_name = "cuda" if pipeline.torch.cuda.is_available() else "cpu"

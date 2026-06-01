@@ -2126,6 +2126,54 @@ def process_llm_diarization_output(llm_output: str) -> list[dict]:
 
     return llm_data
 
+def custom_binarize(probs: np.ndarray, frame_shift: float, onset: float, offset: float, min_duration_on: float, min_duration_off: float):
+    """
+    Áp dụng Binarize theo phong cách Pyannote cho tensor prob của Sortformer.
+    probs: numpy array có shape (num_frames, num_speakers) chứa xác suất [0, 1]
+    """
+    if probs.ndim != 2:
+        return []
+    
+    num_frames, num_speakers = probs.shape
+    segments = []
+    for spk_idx in range(num_speakers):
+        spk_probs = probs[:, spk_idx]
+        active = False
+        start_frame = 0
+        spk_segments = []
+        for i in range(num_frames):
+            if not active and spk_probs[i] >= onset:
+                active = True
+                start_frame = i
+            elif active and spk_probs[i] < offset:
+                active = False
+                end_frame = i
+                spk_segments.append([start_frame * frame_shift, end_frame * frame_shift])
+        if active:
+            spk_segments.append([start_frame * frame_shift, num_frames * frame_shift])
+        
+        # Merge các đoạn gần nhau (min_duration_off)
+        merged_segments = []
+        for seg in spk_segments:
+            if not merged_segments:
+                merged_segments.append(seg)
+            else:
+                if seg[0] - merged_segments[-1][1] <= min_duration_off:
+                    merged_segments[-1][1] = seg[1]
+                else:
+                    merged_segments.append(seg)
+        
+        # Xoá các đoạn quá ngắn (min_duration_on)
+        for seg in merged_segments:
+            if seg[1] - seg[0] >= min_duration_on:
+                segments.append({
+                    'speaker': f"SPEAKER_{spk_idx:02d}", 
+                    'start': float(seg[0]), 
+                    'end': float(seg[1])
+                })
+                
+    return segments
+
 def sortformer_dia(predicted_segments):
     """
     Chuyển output thô của NeMo Sortformer thành DataFrame diarization chuẩn.
@@ -2906,10 +2954,62 @@ def main_process(audio_path, save_path=None, audio_name=None,
             # Chạy Sortformer trên từng chunk. Output của chunk được cộng offset để
             # quay về timeline tuyệt đối của file gốc.
             for chunk in diar_chunks:
-                predicted_segments, _ = diar_model.diarize(
+                predicted_segments, tensor_outputs = diar_model.diarize(
                     audio=chunk["path"], batch_size=1, include_tensor_outputs=True
                 )
-                chunk_df = sortformer_dia(predicted_segments)
+                
+                chunk_df = None
+                if getattr(args, "use_custom_binarize", False) and tensor_outputs is not None:
+                    # Trích xuất tensor xác suất
+                    probs = None
+                    if isinstance(tensor_outputs, torch.Tensor):
+                        probs = tensor_outputs.squeeze(0).cpu().numpy()
+                    elif isinstance(tensor_outputs, list) and len(tensor_outputs) > 0 and isinstance(tensor_outputs[0], torch.Tensor):
+                        probs = tensor_outputs[0].squeeze(0).cpu().numpy()
+                    elif isinstance(tensor_outputs, dict) and "preds" in tensor_outputs:
+                        probs = tensor_outputs["preds"].squeeze(0).cpu().numpy()
+                        
+                    if probs is not None:
+                        # Đảm bảo prob nằm trong khoảng [0, 1]
+                        if probs.min() < 0 or probs.max() > 1.0:
+                            probs = 1.0 / (1.0 + np.exp(-probs))
+                            
+                        # Tính frame_shift động
+                        try:
+                            chunk_duration = float(librosa.get_duration(path=chunk["path"]))
+                            frame_shift = chunk_duration / probs.shape[0]
+                            
+                            onset = float(getattr(args, "onset", 0.53))
+                            offset = float(getattr(args, "offset", 0.49))
+                            min_duration_on = float(getattr(args, "min_duration_on", 0.42))
+                            min_duration_off = float(getattr(args, "min_duration_off", 0.34))
+                            
+                            custom_segments = custom_binarize(probs, frame_shift, onset, offset, min_duration_on, min_duration_off)
+                            chunk_df = pd.DataFrame(custom_segments)
+                            
+                            if not chunk_df.empty:
+                                chunk_df = chunk_df.sort_values(by="start").reset_index(drop=True)
+                                chunk_df["label"] = [chr(ord('A') + i) for i in range(len(chunk_df))]
+                                
+                                def fmt(sec):
+                                    import datetime
+                                    td = datetime.timedelta(seconds=sec)
+                                    hrs = td.seconds // 3600 + td.days * 24
+                                    mins = (td.seconds // 60) % 60
+                                    secs = td.seconds % 60
+                                    ms = int(td.microseconds / 1000)
+                                    return f"{hrs:02d}:{mins:02d}:{secs:02d}.{ms:03d}"
+                                    
+                                chunk_df["segment"] = chunk_df.apply(lambda row: f"[ {fmt(row['start'])} --> {fmt(row['end'])}]", axis=1)
+                            else:
+                                chunk_df = pd.DataFrame(columns=['segment','label','speaker','start','end'])
+                        except Exception as e:
+                            logger.warning(f"Custom binarize failed: {e}. Fallback to default sortformer_dia.")
+                            chunk_df = None
+                            
+                if chunk_df is None:
+                    chunk_df = sortformer_dia(predicted_segments)
+                    
                 if not chunk_df.empty:
                     chunk_df["start"] += chunk["offset"]
                     chunk_df["end"] += chunk["offset"]
@@ -3183,6 +3283,22 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--config_path", type=str, default="config.json", help="config path"
+    )
+    parser.add_argument("--onset", type=float, default=0.53, help="Binarize onset threshold")
+    parser.add_argument("--offset", type=float, default=0.49, help="Binarize offset threshold")
+    parser.add_argument("--min_duration_on", type=float, default=0.42, help="Binarize min duration on")
+    parser.add_argument("--min_duration_off", type=float, default=0.34, help="Binarize min duration off")
+    parser.add_argument("--use_custom_binarize", action=argparse.BooleanOptionalAction, default=True, help="Use custom binarize for Sortformer")
+    parser.add_argument("--sortformer-param", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument( "--sortformer-pad-offset", 
+        type=float, 
+        default=0.01, 
+        help="Enable Sortformer segment boundary adjustment (pad_offset/pad_onset applied after model output)."
+    )
+    parser.add_argument( "--sortformer-pad-onset", 
+        type=float, 
+        default=0.23, 
+        help="Enable Sortformer segment boundary adjustment (pad_offset/pad_onset applied after model output)."
     )
     
     parser.add_argument("--batch_size", type=int, default=64, help="batch size")
