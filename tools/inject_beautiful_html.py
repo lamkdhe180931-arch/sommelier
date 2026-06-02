@@ -82,6 +82,47 @@ def main():
     run_name = run_dir.name
     html = re.sub(r'Run Full \d+', run_name.title(), html, flags=re.IGNORECASE)
     
+    # Detect and replace input and clean audio paths dynamically based on existing files
+    audio_extensions = [".wav", ".mp3", ".m4a", ".flac", ".ogg"]
+    
+    # 1. Full input audio
+    full_input_audio = "00_input/full.wav"
+    input_dir = run_dir / "00_input"
+    if input_dir.exists():
+        for ext in audio_extensions:
+            if (input_dir / f"full{ext}").exists():
+                full_input_audio = f"00_input/full{ext}"
+                break
+    html = html.replace('src="00_input/full.wav"', f'src="{full_input_audio}"')
+    
+    # 2. Preview input audio
+    preview_input_audio = "00_input/preview_input_30s.wav"
+    if input_dir.exists():
+        for ext in audio_extensions:
+            if (input_dir / f"preview_input_30s{ext}").exists():
+                preview_input_audio = f"00_input/preview_input_30s{ext}"
+                break
+    html = html.replace('src="00_input/preview_input_30s.wav"', f'src="{preview_input_audio}"')
+    
+    # 3. Cleaned full audio
+    cleaned_audio = "02_music_clean/cleaned_audio.wav"
+    clean_dir = run_dir / "02_music_clean"
+    if clean_dir.exists():
+        for ext in audio_extensions:
+            if (clean_dir / f"cleaned_audio{ext}").exists():
+                cleaned_audio = f"02_music_clean/cleaned_audio{ext}"
+                break
+    html = html.replace('src="02_music_clean/cleaned_audio.wav"', f'src="{cleaned_audio}"')
+    
+    # 4. Preview cleaned audio
+    preview_cleaned_audio = "02_music_clean/preview_cleaned_30s.wav"
+    if clean_dir.exists():
+        for ext in audio_extensions:
+            if (clean_dir / f"preview_cleaned_30s{ext}").exists():
+                preview_cleaned_audio = f"02_music_clean/preview_cleaned_30s{ext}"
+                break
+    html = html.replace('src="02_music_clean/preview_cleaned_30s.wav"', f'src="{preview_cleaned_audio}"')
+    
     # Save the new file INSIDE the run_full directory so relative audio paths work
     out_path = run_dir / "index.html"
     out_path.write_text(html, encoding="utf-8")
