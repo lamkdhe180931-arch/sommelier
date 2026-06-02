@@ -131,17 +131,20 @@
 
   <div class="section">
     <h2>Segments Data <select id="stage-select" style="margin-left: 10px; font-weight: normal; font-size: 13px; padding: 2px 5px; border-radius: 4px;"></select></h2>
-    <div class="top-stats">
+    <div class="top-stats" id="top-stats">
       <div class="stat-item">Segments: <strong>138</strong></div>
-      <div class="stat-item">SepReformer: <strong>0</strong></div>
-      <div class="stat-item">Separated audio: <strong>90</strong></div>
-      <div class="stat-item">Demucs cleaned: <strong>12</strong></div>
-      <div class="stat-item">Quality guard touched: <strong>17</strong></div>
-      <div class="stat-item">&lt; 1s: <strong>58</strong></div>
+      <div class="stat-item">Speakers: <strong>—</strong></div>
+      <div class="stat-item">Chunks: <strong>—</strong></div>
+      <div class="stat-item">SepReformer: <strong>—</strong></div>
+      <div class="stat-item">Separated audio: <strong>—</strong></div>
+      <div class="stat-item">Demucs cleaned: <strong>—</strong></div>
+      <div class="stat-item">Quality guard touched: <strong>—</strong></div>
+      <div class="stat-item">&lt; 1s: <strong>—</strong></div>
     </div>
     <div class="controls">
       <input type="text" id="search" placeholder="Search Vietnamese text...">
       <select id="filter-speaker"><option value="">All speakers</option></select>
+      <select id="filter-chunk"><option value="">All chunks</option></select>
       <select id="filter-flag">
         <option value="">All segments</option>
         <option value="sepreformer">SepReformer applied</option>
@@ -176,8 +179,12 @@ const COLORS = {"SPEAKER_00": "#e57373", "SPEAKER_01": "#64b5f6", "SPEAKER_02": 
 // Initialize Stage Selector and STAGE_DATA mockup if not injected yet
 if (typeof STAGE_DATA === "undefined") {
   window.STAGE_DATA = { "05_export": typeof SEGMENTS !== "undefined" ? SEGMENTS : [] };
+  window.VAD_CHUNKS = [];
   window.current_stage = "05_export";
   window.SEGMENTS = STAGE_DATA["05_export"];
+}
+if (typeof VAD_CHUNKS === "undefined") {
+  window.VAD_CHUNKS = [];
 }
 
 let DIAR_STATS = { counts: {}, durs: {} };
@@ -190,6 +197,28 @@ function fmtTime(t) {
 }
 function fmtRange(s, e) { return fmtTime(s) + " → " + fmtTime(e); }
 function dur(s) { return (s.end - s.start).toFixed(2) + "s"; }
+
+function getSegmentChunkIndex(seg) {
+  if (!window.VAD_CHUNKS || window.VAD_CHUNKS.length === 0) {
+    return Math.floor(seg.start / 120);
+  }
+  let bestIdx = -1;
+  let maxOverlap = -1;
+  for (let i = 0; i < window.VAD_CHUNKS.length; i++) {
+    const chunkStart = window.VAD_CHUNKS[i].offset;
+    const chunkEnd = chunkStart + window.VAD_CHUNKS[i].duration;
+    const overlapStart = Math.max(seg.start, chunkStart);
+    const overlapEnd = Math.min(seg.end, chunkEnd);
+    if (overlapEnd > overlapStart) {
+      const overlap = overlapEnd - overlapStart;
+      if (overlap > maxOverlap) {
+        maxOverlap = overlap;
+        bestIdx = i;
+      }
+    }
+  }
+  return bestIdx;
+}
 
 // player jump
 const playerFull = document.getElementById("player-full");
@@ -252,6 +281,33 @@ function initStageData() {
         fspk.appendChild(o);
       });
       fspk.value = curVal;
+    }
+
+    // Update chunk filter options
+    const fchk = document.getElementById("filter-chunk");
+    if (fchk) {
+      const curVal = fchk.value;
+      fchk.innerHTML = '<option value="">All chunks</option>';
+      if (window.VAD_CHUNKS && window.VAD_CHUNKS.length > 0) {
+        window.VAD_CHUNKS.forEach((c, idx) => {
+          const o = document.createElement("option");
+          o.value = idx.toString();
+          const startStr = fmtTime(c.offset);
+          const endStr = fmtTime(c.offset + c.duration);
+          o.textContent = `Chunk ${String(idx + 1).padStart(2, '0')} (${startStr} - ${endStr})`;
+          fchk.appendChild(o);
+        });
+      } else {
+        const maxTime = TOTAL_DUR;
+        const numFallbackChunks = Math.ceil(maxTime / 120);
+        for (let idx = 0; idx < numFallbackChunks; idx++) {
+          const o = document.createElement("option");
+          o.value = idx.toString();
+          o.textContent = `Block ${String(idx + 1).padStart(2, '0')} (${fmtTime(idx * 120)} - ${fmtTime((idx + 1) * 120)})`;
+          fchk.appendChild(o);
+        }
+      }
+      fchk.value = curVal;
     }
   }
 
@@ -357,10 +413,18 @@ function detailsHTML(s) {
   return rows.join("");
 }
 
-function renderTable(filterText, filterSpk, filterFlag) {
+function renderTable(filterText, filterSpk, filterChunk, filterFlag) {
   tbody.innerHTML = "";
   const ft = (filterText || "").trim().toLowerCase();
   let visible = 0;
+  let sepReformerCount = 0;
+  let separatedCount = 0;
+  let demucsCount = 0;
+  let qaCount = 0;
+  let shortCount = 0;
+  const visibleSpeakers = new Set();
+  const visibleChunks = new Set();
+
   SEGMENTS.forEach((s, idx) => {
     const d = s.end - s.start;
     const altsDiffer = (
@@ -373,13 +437,28 @@ function renderTable(filterText, filterSpk, filterFlag) {
       if (!blob.includes(ft)) return;
     }
     if (filterSpk && s.speaker !== filterSpk) return;
+
+    const segmentChunkIdx = getSegmentChunkIndex(s);
+    if (filterChunk !== "" && filterChunk !== undefined && filterChunk !== null) {
+      if (segmentChunkIdx.toString() !== filterChunk.toString()) return;
+    }
+
     if (filterFlag === "sepreformer" && !s.sepreformer) return;
     if (filterFlag === "is_separated" && !s.is_separated) return;
     if (filterFlag === "demucs" && !s.demucs) return;
     if (filterFlag === "short" && d >= 1.0) return;
     if (filterFlag === "qa" && (!s.asr_quality_actions || !s.asr_quality_actions.length)) return;
     if (filterFlag === "alts_disagree" && !altsDiffer) return;
+
     visible++;
+    if (s.sepreformer) sepReformerCount++;
+    if (s.is_separated) separatedCount++;
+    if (s.demucs) demucsCount++;
+    if (s.asr_quality_actions && s.asr_quality_actions.length) qaCount++;
+    if (d < 1.0) shortCount++;
+    if (s.speaker) visibleSpeakers.add(s.speaker);
+    if (segmentChunkIdx !== -1) visibleChunks.add(segmentChunkIdx);
+
     const tr = document.createElement("tr");
     tr.id = "seg-row-" + idx;
     const c = COLORS[s.speaker] || "#888";
@@ -400,6 +479,22 @@ function renderTable(filterText, filterSpk, filterFlag) {
     tbody.appendChild(tr);
   });
   vcount.textContent = visible + " / " + SEGMENTS.length;
+
+  // Update dynamic stats
+  const statsEl = document.getElementById("top-stats");
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div class="stat-item">Segments: <strong>${visible}</strong></div>
+      <div class="stat-item">Speakers: <strong>${visibleSpeakers.size}</strong></div>
+      <div class="stat-item">Chunks: <strong>${visibleChunks.size}</strong></div>
+      <div class="stat-item">SepReformer: <strong>${sepReformerCount}</strong></div>
+      <div class="stat-item">Separated audio: <strong>${separatedCount}</strong></div>
+      <div class="stat-item">Demucs cleaned: <strong>${demucsCount}</strong></div>
+      <div class="stat-item">Quality guard touched: <strong>${qaCount}</strong></div>
+      <div class="stat-item">&lt; 1s: <strong>${shortCount}</strong></div>
+    `;
+  }
+
   // wire jump buttons
   tbody.querySelectorAll(".jump-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -410,9 +505,12 @@ function renderTable(filterText, filterSpk, filterFlag) {
   });
 }
 
-searchEl.addEventListener("input", () => renderTable(searchEl.value, fspk.value, fflag.value));
-fspk.addEventListener("change", () => renderTable(searchEl.value, fspk.value, fflag.value));
-fflag.addEventListener("change", () => renderTable(searchEl.value, fspk.value, fflag.value));
+const fchk = document.getElementById("filter-chunk");
+
+searchEl.addEventListener("input", () => renderTable(searchEl.value, fspk.value, fchk.value, fflag.value));
+fspk.addEventListener("change", () => renderTable(searchEl.value, fspk.value, fchk.value, fflag.value));
+fchk.addEventListener("change", () => renderTable(searchEl.value, fspk.value, fchk.value, fflag.value));
+fflag.addEventListener("change", () => renderTable(searchEl.value, fspk.value, fchk.value, fflag.value));
 
 const stageSelect = document.getElementById("stage-select");
 function initStages() {
@@ -429,13 +527,13 @@ function initStages() {
     current_stage = stageSelect.value;
     SEGMENTS = STAGE_DATA[current_stage] || [];
     initStageData();
-    renderTable(searchEl.value, fspk.value, fflag.value);
+    renderTable(searchEl.value, fspk.value, fchk.value, fflag.value);
   });
 }
 
 initStages();
 initStageData();
-renderTable("", "", "");
+renderTable("", "", "", "");
 
 let activeIndicesStr = "";
 playerFull.addEventListener("timeupdate", () => {

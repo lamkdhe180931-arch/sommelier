@@ -54,8 +54,19 @@ def main():
         
     stage_data_json = json.dumps(stage_data, ensure_ascii=False)
     
-    # Replace the SEGMENTS block with STAGE_DATA
-    replacement = f'const STAGE_DATA = {stage_data_json};\nlet current_stage = "05_export" in STAGE_DATA ? "05_export" : Object.keys(STAGE_DATA)[0];\nlet SEGMENTS = STAGE_DATA[current_stage] || [];\n'
+    # Load VAD chunks if available
+    vad_chunks_path = run_dir / "01_diarization" / "vad_chunks.json"
+    vad_chunks = []
+    if vad_chunks_path.exists():
+        try:
+            vad_data = json.loads(vad_chunks_path.read_text(encoding="utf-8"))
+            vad_chunks = vad_data.get("vad_chunks", [])
+        except Exception as e:
+            print(f"Error loading vad_chunks: {e}")
+    vad_chunks_json = json.dumps(vad_chunks, ensure_ascii=False)
+    
+    # Replace the SEGMENTS block with STAGE_DATA and VAD_CHUNKS
+    replacement = f'const STAGE_DATA = {stage_data_json};\nconst VAD_CHUNKS = {vad_chunks_json};\nlet current_stage = "05_export" in STAGE_DATA ? "05_export" : Object.keys(STAGE_DATA)[0];\nlet SEGMENTS = STAGE_DATA[current_stage] || [];\n'
     
     # Try the old SEGMENTS way first
     html, n = re.subn(r'^const SEGMENTS = \[.*\].*$', replacement, html, count=1, flags=re.MULTILINE)
