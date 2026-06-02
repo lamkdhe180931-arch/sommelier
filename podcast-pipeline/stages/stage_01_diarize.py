@@ -731,6 +731,7 @@ def prepare_diarization_chunks(
         f"Pre-diarization chunking created {len(chunk_entries)} chunks "
         f"(max {max_duration}s) from {os.path.basename(audio_path)}"
     )
+    return chunk_entries, temp_dir
 
 
 def parse_args() -> argparse.Namespace:
