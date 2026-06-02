@@ -740,7 +740,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config_path", default="config.json")
     parser.add_argument("--seg_th", type=float, default=0.11)
     parser.add_argument("--min_cluster_size", type=int, default=11)
-    parser.add_argument("--same_speaker_merge_gap", type=float, default=1.0)
+    parser.add_argument("--clust_th", type=float, default=0.5)
+    parser.add_argument("--merge_gap", type=float, default=2.0)
+    parser.add_argument("--same_speaker_merge_gap", type=float, default=0.3)
     parser.add_argument("--short_backchannel_seconds", type=float, default=1.0)
     parser.add_argument("--max_segment_duration", type=float, default=30.0)
     
