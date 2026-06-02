@@ -529,6 +529,7 @@ def align_speakers_across_chunks(
         remapped_df["speaker"] = remapped_df["speaker"].map(mapping)
         aligned_frames.append(remapped_df)
 
+    return aligned_frames
 
 
 def re_cluster_speakers(
