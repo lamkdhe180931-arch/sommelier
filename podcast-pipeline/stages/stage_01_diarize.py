@@ -655,6 +655,7 @@ def re_cluster_speakers(
         result["speaker"] = result["speaker"].map(mapping)
         return result, stats
 
+    return speakerdia, stats
 
 
 def prepare_diarization_chunks(
