@@ -1,12 +1,12 @@
 import os
-with open("main_original_ASR_MoE.py", "r") as f:
+script_dir = os.path.dirname(os.path.abspath(__file__))
+with open(os.path.join(script_dir, "main_original_ASR_MoE.py"), "r") as f:
     lines = f.readlines()
 
 def get(start, end):
     return "".join(lines[start-1:end])
 
-out = "stages/stage_01_diarize.py"
-
+out = os.path.join(script_dir, "stages/stage_01_diarize.py")
 imports = """from __future__ import annotations
 import argparse
 import shutil

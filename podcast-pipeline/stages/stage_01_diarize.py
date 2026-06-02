@@ -1,98 +1,54 @@
 from __future__ import annotations
-
-"""
-Stage 01 – Diarization
-======================
-Fully self-contained diarization stage.  Does NOT import from
-``main_original_ASR_MoE``.  All required helpers are inlined below,
-preserving the original Vietnamese comments.
-"""
-
 import argparse
-import datetime
-import logging
-import os
 import shutil
-import sys
-import tempfile
 import time
+import json
+import datetime
 from pathlib import Path
 from types import SimpleNamespace
-
-import librosa
-import numpy as np
 import pandas as pd
+import numpy as np
+import librosa
 import torch
+from pydub import AudioSegment
+import soundfile as sf
+import tempfile
+import warnings
 
-# ---------------------------------------------------------------------------
-# Ensure the parent ``podcast-pipeline`` directory is importable so that
-# ``models.*``, ``utils.*`` and ``stage_common`` can be resolved regardless
-# of how the script is invoked.
-# ---------------------------------------------------------------------------
-_STAGE_DIR = Path(__file__).resolve().parent            # .../stages/
-_PIPELINE_DIR = _STAGE_DIR.parent                       # .../podcast-pipeline/
-if str(_PIPELINE_DIR) not in sys.path:
-    sys.path.insert(0, str(_PIPELINE_DIR))
-if str(_STAGE_DIR) not in sys.path:
-    sys.path.insert(0, str(_STAGE_DIR))
+try:
+    from nemo.collections.asr.models import SortformerEncLabelModel
+except ImportError:
+    SortformerEncLabelModel = None
+
+try:
+    from pyannote.audio import Inference
+except ImportError:
+    Inference = None
 
 import stage_common
-from models import silero_vad
 from utils.tool import load_cfg
-
-# ---------------------------------------------------------------------------
-# Logger – use utils.logger.Logger if available, otherwise fall back to
-# Python's built-in logging module.
-# ---------------------------------------------------------------------------
 try:
-    from utils.logger import Logger as _Logger
+    from utils.logger import Logger
+except ImportError:
+    import logging
+    class Logger:
+        @staticmethod
+        def get_logger():
+            logging.basicConfig(level=logging.INFO)
+            return logging.getLogger("stage_01")
+            
+from models.silero_vad import SileroVAD
 
-    def _get_logger():
-        return _Logger.get_logger()
-except Exception:
-    def _get_logger():
-        _log = logging.getLogger("stage_01_diarize")
-        if not _log.handlers:
-            _handler = logging.StreamHandler()
-            _handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-            _log.addHandler(_handler)
-            _log.setLevel(logging.DEBUG)
-        return _log
+warnings.filterwarnings("ignore")
+audio_count = 0
 
-# ---------------------------------------------------------------------------
-# Module-level state (populated by main())
-# ---------------------------------------------------------------------------
-logger = _get_logger()
-cfg: dict = {}
-args: SimpleNamespace = SimpleNamespace()
-vad: silero_vad.SileroVAD | None = None
-device: torch.device = torch.device("cpu")
-device_name: str = "cpu"
-
-# ============================================================================
-# Hằng số dùng xuyên suốt pipeline
-# ============================================================================
 # Giới hạn mỗi chunk diarization để tránh model xử lý audio quá dài một lần.
 # Ưu tiên cắt tại khoảng lặng do VAD tìm được để hạn chế cắt ngang câu nói.
 MAX_DIA_CHUNK_DURATION = 3 * 60  # giây; giữ dưới ngưỡng dài để Sortformer ổn định hơn
 MIN_SPLIT_SILENCE = 1  # giây im lặng tối thiểu để được chọn làm điểm cắt
 SILERO_MIN_SILENCE_DURATION_MS = 100
 MIN_EMBED_DURATION = 0.5  # giây; segment ngắn hơn mức này sẽ bỏ qua embedding
-
-# ============================================================================
-# Default binarize parameters
-# ============================================================================
-DEFAULT_ONSET = 0.53
-DEFAULT_OFFSET = 0.49
-DEFAULT_PAD_ONSET = 0.23
-DEFAULT_PAD_OFFSET = 0.01
-DEFAULT_MIN_DURATION_ON = 0.42
-DEFAULT_MIN_DURATION_OFF = 0.34
-
-
-# ============================================================================
-# Functions extracted from main_original_ASR_MoE.py
-# ============================================================================
+QWEN_3_OMNI_PORT = "11500"
 
 def _apply_sortformer_segment_padding_from_args(
     df: pd.DataFrame, args, logger, audio_duration: float | None = None
@@ -131,7 +87,6 @@ def _apply_sortformer_segment_padding_from_args(
     df["end"] = df[["start", "end"]].max(axis=1)
 
     return df
-
 
 def custom_binarize(probs: np.ndarray, frame_shift: float, onset: float, offset: float, min_duration_on: float, min_duration_off: float):
     """
@@ -181,7 +136,6 @@ def custom_binarize(probs: np.ndarray, frame_shift: float, onset: float, offset:
                 
     return segments
 
-
 def sortformer_dia(predicted_segments):
     """
     Chuyển output thô của NeMo Sortformer thành DataFrame diarization chuẩn.
@@ -224,7 +178,6 @@ def sortformer_dia(predicted_segments):
     df = df.sort_values(by='start').reset_index(drop=True)
     return df
 
-
 def df_to_list(df: pd.DataFrame) -> list[dict]:
     """
     Chuyển DataFrame diarization thành list dict dùng cho ASR/export.
@@ -243,7 +196,6 @@ def df_to_list(df: pd.DataFrame) -> list[dict]:
             'speaker': row['speaker']
         })
     return records
-
 
 def split_long_segments(segment_list, max_duration=30.0):
     """
@@ -293,7 +245,6 @@ def split_long_segments(segment_list, max_duration=30.0):
                 
     return new_segments
 
-
 def _build_silence_intervals(waveform, sample_rate, min_silence):
     """
     Dùng VAD để tìm các khoảng im lặng có thể dùng làm điểm cắt chunk.
@@ -341,7 +292,6 @@ def _build_silence_intervals(waveform, sample_rate, min_silence):
     if trailing >= min_silence:
         silence.append((last_end, last_end + trailing))
     return total_duration, silence
-
 
 def _build_chunk_ranges(total_duration, silence_intervals, max_duration):
     """
@@ -406,12 +356,11 @@ def _build_chunk_ranges(total_duration, silence_intervals, max_duration):
 
     return chunk_ranges if chunk_ranges else [(0.0, total_duration)]
 
-
 def _extract_speaker_embedding(
     audio_info,
     start: float,
     end: float,
-    embedder=None,
+    embedder: Inference | None,
     sample_window: float = 2.0,
     min_duration: float = 0.5,
 ):
@@ -470,7 +419,6 @@ def _extract_speaker_embedding(
         emb = emb.mean(axis=0)
     return emb
 
-
 def _cosine_similarity(vec_a, vec_b):
     """Tính cosine similarity; trả -1.0 nếu vector không hợp lệ."""
     if vec_a is None or vec_b is None:
@@ -480,8 +428,7 @@ def _cosine_similarity(vec_a, vec_b):
         return -1.0
     return float(np.dot(vec_a, vec_b) / denom)
 
-
-def _compute_chunk_speaker_centroids(chunk_df: pd.DataFrame, audio_info, embedder=None):
+def _compute_chunk_speaker_centroids(chunk_df: pd.DataFrame, audio_info, embedder: Inference | None):
     """
     Tạo centroid embedding cho từng speaker trong một chunk diarization.
 
@@ -506,11 +453,10 @@ def _compute_chunk_speaker_centroids(chunk_df: pd.DataFrame, audio_info, embedde
             centroids[speaker] = np.mean(embeddings, axis=0)
     return centroids
 
-
 def align_speakers_across_chunks(
     chunk_frames: list[pd.DataFrame],
     audio_info,
-    embedder=None,
+    embedder: Inference | None,
     similarity_threshold: float = 0.75,
 ):
     """
@@ -578,7 +524,6 @@ def align_speakers_across_chunks(
         aligned_frames.append(remapped_df)
 
     return aligned_frames
-
 
 def re_cluster_speakers(
     speakerdia,
@@ -705,7 +650,6 @@ def re_cluster_speakers(
 
     return speakerdia, stats
 
-
 def prepare_diarization_chunks(
     audio_path,
     audio_info,
@@ -725,8 +669,6 @@ def prepare_diarization_chunks(
     Trả về:
         (chunk_entries, temp_dir)
     """
-    from pydub import AudioSegment
-
     waveform = audio_info["waveform"]
     sample_rate = audio_info["sample_rate"]
     total_duration, silence_intervals = _build_silence_intervals(
@@ -787,10 +729,6 @@ def prepare_diarization_chunks(
     return chunk_entries, temp_dir
 
 
-# ============================================================================
-# CLI
-# ============================================================================
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Stage 01: run diarization and save segments JSON.")
     parser.add_argument("--input_audio", required=True, help="Input audio file path.")
@@ -800,87 +738,61 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min_cluster_size", type=int, default=11)
     parser.add_argument("--clust_th", type=float, default=0.5)
     parser.add_argument("--merge_gap", type=float, default=2.0)
-    parser.add_argument(
-        "--same_speaker_merge_gap",
-        type=float,
-        default=0.3,
-        help="Merge only adjacent same-speaker segments when the gap is at or below this many seconds.",
-    )
-    parser.add_argument(
-        "--short_backchannel_seconds",
-        type=float,
-        default=1.0,
-        help="Keep but label segments shorter than this as short_backchannel.",
-    )
+    parser.add_argument("--same_speaker_merge_gap", type=float, default=0.3)
+    parser.add_argument("--short_backchannel_seconds", type=float, default=1.0)
     parser.add_argument("--speaker-link-threshold", type=float, default=0.6)
     parser.add_argument("--max_segment_duration", type=float, default=30.0)
-    parser.add_argument(
-        "--speaker-recluster-threshold",
-        type=float,
-        default=0.75,
-        help="Cosine similarity threshold for merging fragmented speaker IDs globally. Set to 0 to disable.",
-    )
+    parser.add_argument("--speaker-recluster-threshold", type=float, default=0.75)
     parser.add_argument("--sortformer-param", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--sortformer-pad-offset", type=float, default=DEFAULT_PAD_OFFSET)
-    parser.add_argument("--sortformer-pad-onset", type=float, default=DEFAULT_PAD_ONSET)
-    parser.add_argument("--onset", type=float, default=DEFAULT_ONSET)
-    parser.add_argument("--offset", type=float, default=DEFAULT_OFFSET)
-    parser.add_argument("--min-duration-on", type=float, default=DEFAULT_MIN_DURATION_ON)
-    parser.add_argument("--min-duration-off", type=float, default=DEFAULT_MIN_DURATION_OFF)
+    parser.add_argument("--sortformer-pad-offset", type=float, default=0.01)
+    parser.add_argument("--sortformer-pad-onset", type=float, default=0.23)
+    parser.add_argument("--onset", type=float, default=0.53)
+    parser.add_argument("--offset", type=float, default=0.49)
+    parser.add_argument("--min-duration-on", type=float, default=0.42)
+    parser.add_argument("--min-duration-off", type=float, default=0.34)
     parser.add_argument("--use-custom-binarize", action=argparse.BooleanOptionalAction, default=True)
     return parser.parse_args()
 
-
-# ============================================================================
-# Main
-# ============================================================================
-
 def main() -> None:
-    global logger, cfg, args, vad, device, device_name
+    args = parse_args()
+    audio_path = Path(args.input_audio).expanduser().resolve()
+    out_path = Path(args.out) if args.out else stage_common.default_stage_dir(audio_path) / "diarization.json"
 
-    cli_args = parse_args()
-    audio_path = Path(cli_args.input_audio).expanduser().resolve()
-    out_path = Path(cli_args.out) if cli_args.out else stage_common.default_stage_dir(audio_path) / "diarization.json"
-
-    cfg = load_cfg(cli_args.config_path)
-    logger = _get_logger()
-
-    args = SimpleNamespace(
-        merge_gap=cli_args.merge_gap,
-        sortformer_param=cli_args.sortformer_param,
-        sortformer_pad_offset=cli_args.sortformer_pad_offset,
-        sortformer_pad_onset=cli_args.sortformer_pad_onset,
-        onset=cli_args.onset,
-        offset=cli_args.offset,
-        min_duration_on=cli_args.min_duration_on,
-        min_duration_off=cli_args.min_duration_off,
-        use_custom_binarize=cli_args.use_custom_binarize,
+    cfg = load_cfg(args.config_path)
+    logger = Logger.get_logger()
+    
+    pipe_args = SimpleNamespace(
+        merge_gap=args.merge_gap,
+        sortformer_param=args.sortformer_param,
+        sortformer_pad_offset=args.sortformer_pad_offset,
+        sortformer_pad_onset=args.sortformer_pad_onset,
+        onset=args.onset,
+        offset=args.offset,
+        min_duration_on=args.min_duration_on,
+        min_duration_off=args.min_duration_off,
+        use_custom_binarize=args.use_custom_binarize,
     )
 
     device_name = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device_name)
     logger.info(f"Stage 01 device: {device_name}")
 
-    vad = silero_vad.SileroVAD(device=device)
+    vad = SileroVAD(device=device)
 
-    # Speaker embedder for cross-chunk linking
     speaker_embedder = None
     if cfg.get("huggingface_token", "").startswith("hf"):
         try:
-            from pyannote.audio import Inference
+            if Inference is None:
+                raise ImportError("pyannote.audio is not installed")
             from pyannote.audio import Model as PyannoteModel
             emb_model = PyannoteModel.from_pretrained("pyannote/embedding", use_auth_token=cfg["huggingface_token"])
-            speaker_embedder = Inference(
-                emb_model,
-                device=device,
-                window="whole",
-            )
+            speaker_embedder = Inference(emb_model, device=device, window="whole")
         except Exception as exc:
-            logger.warning(f"Speaker embedder unavailable; cross-chunk linking skipped: {exc}")
-    else:
-        logger.warning("Hugging Face token is not configured; cross-chunk linking skipped.")
+            logger.warning(f"Speaker embedder unavailable: {exc}")
 
-    from nemo.collections.asr.models import SortformerEncLabelModel
+    if SortformerEncLabelModel is None:
+        raise ImportError("nemo_toolkit[asr] is required")
+        
     diar_model = SortformerEncLabelModel.from_pretrained("nvidia/diar_sortformer_4spk-v1")
     try:
         diar_model = diar_model.to(device)
@@ -893,18 +805,17 @@ def main() -> None:
     audio_duration = len(audio_info["waveform"]) / audio_info["sample_rate"]
 
     start_time = time.time()
-    diar_chunks, temp_chunk_dir = prepare_diarization_chunks(str(audio_path), audio_info)
+    diar_chunks, temp_chunk_dir = prepare_diarization_chunks(str(audio_path), audio_info, vad)
     diarization_frames = []
 
     try:
         for chunk in diar_chunks:
             predicted_segments, tensor_outputs = diar_model.diarize(
-                audio=chunk["path"],
-                batch_size=1,
-                include_tensor_outputs=True,
+                audio=chunk["path"], batch_size=1, include_tensor_outputs=True
             )
+            
             chunk_df = None
-            if getattr(args, "use_custom_binarize", False) and tensor_outputs is not None:
+            if getattr(pipe_args, "use_custom_binarize", False) and tensor_outputs is not None:
                 probs = None
                 if isinstance(tensor_outputs, torch.Tensor):
                     probs = tensor_outputs.squeeze(0).cpu().numpy()
@@ -912,26 +823,28 @@ def main() -> None:
                     probs = tensor_outputs[0].squeeze(0).cpu().numpy()
                 elif isinstance(tensor_outputs, dict) and "preds" in tensor_outputs:
                     probs = tensor_outputs["preds"].squeeze(0).cpu().numpy()
+                    
                 if probs is not None:
                     if probs.min() < 0 or probs.max() > 1.0:
                         probs = 1.0 / (1.0 + np.exp(-probs))
                     try:
                         chunk_duration = float(librosa.get_duration(path=chunk["path"]))
                         frame_shift = chunk_duration / probs.shape[0]
-                        onset = float(getattr(args, "onset", 0.53))
-                        offset = float(getattr(args, "offset", 0.49))
-                        min_duration_on = float(getattr(args, "min_duration_on", 0.42))
-                        min_duration_off = float(getattr(args, "min_duration_off", 0.34))
-                        if getattr(args, "_logged_custom_binarize", None) != True:
-                            logger.info(f"Applying custom binarize with params -> onset: {onset}, offset: {offset}, min_on: {min_duration_on}, min_off: {min_duration_off}")
-                            setattr(args, "_logged_custom_binarize", True)
+                        onset = float(getattr(pipe_args, "onset", 0.53))
+                        offset = float(getattr(pipe_args, "offset", 0.49))
+                        min_duration_on = float(getattr(pipe_args, "min_duration_on", 0.42))
+                        min_duration_off = float(getattr(pipe_args, "min_duration_off", 0.34))
+                        
+                        if getattr(pipe_args, "_logged_custom_binarize", None) != True:
+                            logger.info(f"Applying custom binarize -> onset: {onset}, offset: {offset}")
+                            setattr(pipe_args, "_logged_custom_binarize", True)
+                            
                         custom_segments = custom_binarize(probs, frame_shift, onset, offset, min_duration_on, min_duration_off)
                         chunk_df = pd.DataFrame(custom_segments)
                         if not chunk_df.empty:
                             chunk_df = chunk_df.sort_values(by="start").reset_index(drop=True)
                             chunk_df["label"] = [chr(ord('A') + i) for i in range(len(chunk_df))]
                             def fmt(sec):
-                                import datetime
                                 td = datetime.timedelta(seconds=sec)
                                 hrs = td.seconds // 3600 + td.days * 24
                                 mins = (td.seconds // 60) % 60
@@ -942,19 +855,16 @@ def main() -> None:
                         else:
                             chunk_df = pd.DataFrame(columns=['segment','label','speaker','start','end'])
                     except Exception as e:
-                        logger.warning(f"Custom binarize failed: {e}. Fallback to default sortformer_dia.")
+                        logger.warning(f"Custom binarize failed: {e}")
                         chunk_df = None
+                        
             if chunk_df is None:
                 chunk_df = sortformer_dia(predicted_segments)
+                
             if not chunk_df.empty:
                 chunk_df["start"] += chunk["offset"]
                 chunk_df["end"] += chunk["offset"]
-                chunk_df = _apply_sortformer_segment_padding_from_args(
-                    chunk_df,
-                    args=args,
-                    logger=logger,
-                    audio_duration=audio_duration,
-                )
+                chunk_df = _apply_sortformer_segment_padding_from_args(chunk_df, pipe_args, logger, audio_duration)
             diarization_frames.append(chunk_df)
     finally:
         if temp_chunk_dir:
@@ -962,63 +872,44 @@ def main() -> None:
 
     if diarization_frames:
         diarization_frames = align_speakers_across_chunks(
-            diarization_frames,
-            audio_info=audio_info,
-            embedder=speaker_embedder,
-            similarity_threshold=cli_args.speaker_link_threshold,
+            diarization_frames, audio_info=audio_info, embedder=speaker_embedder, similarity_threshold=args.speaker_link_threshold
         )
         speakerdia = pd.concat(diarization_frames, ignore_index=True)
     else:
         speakerdia = pd.DataFrame(columns=["segment", "label", "speaker", "start", "end"])
 
     recluster_stats = {"skipped": True, "reason": "disabled_or_no_embedder"}
-    if cli_args.speaker_recluster_threshold > 0 and speaker_embedder is not None:
+    if args.speaker_recluster_threshold > 0 and speaker_embedder is not None:
         speakerdia, recluster_stats = re_cluster_speakers(
-            speakerdia,
-            audio_info=audio_info,
-            embedder=speaker_embedder,
-            similarity_threshold=cli_args.speaker_recluster_threshold,
+            speakerdia, audio_info=audio_info, embedder=speaker_embedder, similarity_threshold=args.speaker_recluster_threshold
         )
-        print(f"Speaker re-cluster: {recluster_stats.get('input_speakers', '?')} -> {recluster_stats.get('output_speakers', '?')} speakers")
 
-    segments = split_long_segments(
-        df_to_list(speakerdia),
-        max_duration=cli_args.max_segment_duration,
+    segments = df_to_list(speakerdia)
+    segments = split_long_segments(segments, max_duration=args.max_segment_duration)
+    segments, postproc_stats = stage_common.postprocess_diarization_segments(
+        segments, same_speaker_merge_gap=args.same_speaker_merge_gap, short_backchannel_seconds=args.short_backchannel_seconds, max_segment_duration=args.max_segment_duration
     )
-    segments, postprocess_stats = stage_common.postprocess_diarization_segments(
-        segments,
-        same_speaker_merge_gap=cli_args.same_speaker_merge_gap,
-        short_backchannel_seconds=cli_args.short_backchannel_seconds,
-        max_segment_duration=cli_args.max_segment_duration,
-    )
-    processing_time = time.time() - start_time
+    
+    elapsed = time.time() - start_time
+    logger.info(f"Diarization finished in {elapsed:.2f}s.")
 
-    stage_common.dump_json(
-        {
-            "audio_path": str(audio_path),
-            "audio_name": stage_common.audio_name_from_path(audio_path),
-            "sample_rate": sample_rate,
-            "audio_duration_seconds": audio_duration,
-            "segments": stage_common.clean_segments_for_json(segments),
-            "metadata": {
-                "stage": "diarize",
-                "processing_time_seconds": processing_time,
-                "rt_factor": processing_time / audio_duration if audio_duration > 0 else 0,
-                "seg_th": cli_args.seg_th,
-                "min_cluster_size": cli_args.min_cluster_size,
-                "clust_th": cli_args.clust_th,
-                "speaker_link_threshold": cli_args.speaker_link_threshold,
-                "same_speaker_merge_gap_seconds": cli_args.same_speaker_merge_gap,
-                "short_backchannel_seconds": cli_args.short_backchannel_seconds,
-                "speaker_recluster_threshold": cli_args.speaker_recluster_threshold,
-                "speaker_recluster": recluster_stats,
-                "postprocess": postprocess_stats,
-            },
+    out_data = {
+        "audio_path": str(audio_path),
+        "audio_name": audio_info["name"],
+        "sample_rate": audio_info["sample_rate"],
+        "audio_duration_seconds": audio_duration,
+        "segments": stage_common.clean_segments_for_json(segments),
+        "metadata": {
+            "stage": "diarize",
+            "device": device_name,
+            "processing_time_seconds": elapsed,
+            "postprocessing": postproc_stats,
+            "reclustering": recluster_stats,
         },
-        out_path,
-    )
-    print(f"Stage 01 complete: {out_path}")
-
+    }
+    
+    stage_common.dump_json(out_data, out_path)
+    logger.info(f"Saved diarization to {out_path}")
 
 if __name__ == "__main__":
     main()
