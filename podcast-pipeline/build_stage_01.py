@@ -8,6 +8,7 @@ def get(start, end):
 
 out = os.path.join(script_dir, "stages/stage_01_diarize.py")
 imports = """from __future__ import annotations
+import os
 import argparse
 import shutil
 import time

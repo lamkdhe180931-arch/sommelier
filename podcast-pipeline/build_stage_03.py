@@ -10,6 +10,7 @@ def get(start, end):
 out = os.path.join(script_dir, "stages/stage_03_overlap.py")
 
 imports = """from __future__ import annotations
+import os
 import argparse
 import shutil
 import time
