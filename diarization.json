@@ -1,0 +1,5822 @@
+{
+  "audio_path": "/kaggle/input/datasets/kieuduclamk18hl/datav3/audio_v2.mp3",
+  "audio_name": "audio_v2.mp3",
+  "sample_rate": 16000,
+  "audio_duration_seconds": 4493.5978125,
+  "vad_chunks": [
+    {
+      "offset": 0.0,
+      "duration": 180.0
+    },
+    {
+      "offset": 180.0,
+      "duration": 73.584
+    },
+    {
+      "offset": 253.584,
+      "duration": 180.0
+    },
+    {
+      "offset": 433.584,
+      "duration": 179.488
+    },
+    {
+      "offset": 613.072,
+      "duration": 149.904
+    },
+    {
+      "offset": 762.976,
+      "duration": 158.30399999999997
+    },
+    {
+      "offset": 921.28,
+      "duration": 180.0
+    },
+    {
+      "offset": 1101.28,
+      "duration": 151.82400000000007
+    },
+    {
+      "offset": 1253.104,
+      "duration": 122.03199999999993
+    },
+    {
+      "offset": 1375.136,
+      "duration": 119.64800000000014
+    },
+    {
+      "offset": 1494.784,
+      "duration": 138.20800000000008
+    },
+    {
+      "offset": 1632.9920000000002,
+      "duration": 180.0
+    },
+    {
+      "offset": 1812.9920000000002,
+      "duration": 33.85599999999977
+    },
+    {
+      "offset": 1846.848,
+      "duration": 175.72800000000007
+    },
+    {
+      "offset": 2022.576,
+      "duration": 174.46399999999994
+    },
+    {
+      "offset": 2197.04,
+      "duration": 157.88799999999992
+    },
+    {
+      "offset": 2354.928,
+      "duration": 172.4319999999998
+    },
+    {
+      "offset": 2527.3599999999997,
+      "duration": 160.22400000000016
+    },
+    {
+      "offset": 2687.584,
+      "duration": 156.83200000000033
+    },
+    {
+      "offset": 2844.416,
+      "duration": 174.73599999999988
+    },
+    {
+      "offset": 3019.152,
+      "duration": 155.92000000000007
+    },
+    {
+      "offset": 3175.072,
+      "duration": 159.5039999999999
+    },
+    {
+      "offset": 3334.576,
+      "duration": 180.0
+    },
+    {
+      "offset": 3514.576,
+      "duration": 4.720000000000255
+    },
+    {
+      "offset": 3519.2960000000003,
+      "duration": 180.0
+    },
+    {
+      "offset": 3699.2960000000003,
+      "duration": 76.39999999999964
+    },
+    {
+      "offset": 3775.696,
+      "duration": 116.09600000000046
+    },
+    {
+      "offset": 3891.7920000000004,
+      "duration": 173.40799999999945
+    },
+    {
+      "offset": 4065.2,
+      "duration": 98.35199999999986
+    },
+    {
+      "offset": 4163.552,
+      "duration": 159.95200000000114
+    },
+    {
+      "offset": 4323.504000000001,
+      "duration": 131.7599999999993
+    },
+    {
+      "offset": 4455.264,
+      "duration": 38.33381250000002
+    }
+  ],
+  "segments": [
+    {
+      "index": "00000",
+      "start": 0.38,
+      "end": 12.13,
+      "speaker": "SPEAKER_00",
+      "duration": 11.75,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00001",
+      "start": 12.700000000000001,
+      "end": 14.530000000000001,
+      "speaker": "SPEAKER_01",
+      "duration": 1.83,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00002",
+      "start": 13.340000000000002,
+      "end": 17.01,
+      "speaker": "SPEAKER_00",
+      "duration": 3.67,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00003",
+      "start": 18.06,
+      "end": 48.06,
+      "speaker": "SPEAKER_00",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00004",
+      "start": 27.5,
+      "end": 30.69,
+      "speaker": "SPEAKER_01",
+      "duration": 3.19,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00005",
+      "start": 48.06,
+      "end": 51.41,
+      "speaker": "SPEAKER_00",
+      "duration": 3.35,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00006",
+      "start": 51.739999999999995,
+      "end": 58.05,
+      "speaker": "SPEAKER_01",
+      "duration": 6.31,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00007",
+      "start": 58.699999999999996,
+      "end": 59.89,
+      "speaker": "SPEAKER_00",
+      "duration": 1.19,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00008",
+      "start": 59.739999999999995,
+      "end": 67.97,
+      "speaker": "SPEAKER_01",
+      "duration": 8.23,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00009",
+      "start": 67.58,
+      "end": 70.92999999999999,
+      "speaker": "SPEAKER_00",
+      "duration": 3.35,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00010",
+      "start": 69.42,
+      "end": 99.42,
+      "speaker": "SPEAKER_01",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00011",
+      "start": 99.42,
+      "end": 103.41,
+      "speaker": "SPEAKER_01",
+      "duration": 3.99,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00012",
+      "start": 103.74,
+      "end": 103.97,
+      "speaker": "SPEAKER_00",
+      "duration": 0.23,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00013",
+      "start": 104.78,
+      "end": 106.61,
+      "speaker": "SPEAKER_01",
+      "duration": 1.83,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00014",
+      "start": 107.66,
+      "end": 137.33,
+      "speaker": "SPEAKER_00",
+      "duration": 29.67,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00015",
+      "start": 137.98,
+      "end": 167.98,
+      "speaker": "SPEAKER_01",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00016",
+      "start": 140.22000000000003,
+      "end": 140.53,
+      "speaker": "SPEAKER_00",
+      "duration": 0.31,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00017",
+      "start": 153.50000000000003,
+      "end": 153.73000000000002,
+      "speaker": "SPEAKER_00",
+      "duration": 0.23,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00018",
+      "start": 165.26000000000002,
+      "end": 165.49,
+      "speaker": "SPEAKER_00",
+      "duration": 0.23,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00019",
+      "start": 167.98,
+      "end": 180.05,
+      "speaker": "SPEAKER_01",
+      "duration": 12.07,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00020",
+      "start": 170.54000000000002,
+      "end": 172.29000000000002,
+      "speaker": "SPEAKER_00",
+      "duration": 1.75,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00021",
+      "start": 180.3,
+      "end": 191.32754782608697,
+      "speaker": "SPEAKER_02",
+      "duration": 11.027548,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00022",
+      "start": 192.0574434782609,
+      "end": 194.9267652173913,
+      "speaker": "SPEAKER_03",
+      "duration": 2.869322,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00023",
+      "start": 196.13655652173915,
+      "end": 198.04608695652175,
+      "speaker": "SPEAKER_03",
+      "duration": 1.90953,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00024",
+      "start": 199.33586086956524,
+      "end": 206.44426086956523,
+      "speaker": "SPEAKER_03",
+      "duration": 7.1084,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00025",
+      "start": 200.13568695652174,
+      "end": 201.32537391304348,
+      "speaker": "SPEAKER_02",
+      "duration": 1.189687,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00026",
+      "start": 207.81401739130436,
+      "end": 222.76071304347826,
+      "speaker": "SPEAKER_03",
+      "duration": 14.946696,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00027",
+      "start": 210.21349565217392,
+      "end": 211.40318260869566,
+      "speaker": "SPEAKER_02",
+      "duration": 1.189687,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00028",
+      "start": 223.89052173913043,
+      "end": 236.5977043478261,
+      "speaker": "SPEAKER_03",
+      "duration": 12.707183,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00029",
+      "start": 236.60775652173913,
+      "end": 238.51728695652176,
+      "speaker": "SPEAKER_02",
+      "duration": 1.90953,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00030",
+      "start": 239.80706086956522,
+      "end": 249.7948347826087,
+      "speaker": "SPEAKER_02",
+      "duration": 9.987774,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00031",
+      "start": 241.6466608695652,
+      "end": 242.1165043478261,
+      "speaker": "SPEAKER_03",
+      "duration": 0.469843,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00032",
+      "start": 248.92507826086955,
+      "end": 252.91415652173913,
+      "speaker": "SPEAKER_03",
+      "duration": 3.989078,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00033",
+      "start": 254.44400000000002,
+      "end": 281.79400000000004,
+      "speaker": "SPEAKER_04",
+      "duration": 27.35,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00034",
+      "start": 262.844,
+      "end": 264.194,
+      "speaker": "SPEAKER_05",
+      "duration": 1.35,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00035",
+      "start": 271.964,
+      "end": 272.274,
+      "speaker": "SPEAKER_05",
+      "duration": 0.31,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00036",
+      "start": 281.964,
+      "end": 288.754,
+      "speaker": "SPEAKER_05",
+      "duration": 6.79,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00037",
+      "start": 286.684,
+      "end": 315.954,
+      "speaker": "SPEAKER_04",
+      "duration": 29.27,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00038",
+      "start": 290.124,
+      "end": 291.394,
+      "speaker": "SPEAKER_05",
+      "duration": 1.27,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00039",
+      "start": 305.404,
+      "end": 305.954,
+      "speaker": "SPEAKER_05",
+      "duration": 0.55,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00040",
+      "start": 316.604,
+      "end": 326.834,
+      "speaker": "SPEAKER_05",
+      "duration": 10.23,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00041",
+      "start": 319.884,
+      "end": 320.11400000000003,
+      "speaker": "SPEAKER_04",
+      "duration": 0.23,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00042",
+      "start": 321.724,
+      "end": 322.03400000000005,
+      "speaker": "SPEAKER_04",
+      "duration": 0.31,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00043",
+      "start": 328.04400000000004,
+      "end": 328.594,
+      "speaker": "SPEAKER_04",
+      "duration": 0.55,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00044",
+      "start": 329.004,
+      "end": 333.954,
+      "speaker": "SPEAKER_05",
+      "duration": 4.95,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00045",
+      "start": 329.724,
+      "end": 330.514,
+      "speaker": "SPEAKER_04",
+      "duration": 0.79,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00046",
+      "start": 334.924,
+      "end": 364.924,
+      "speaker": "SPEAKER_04",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00047",
+      "start": 335.084,
+      "end": 335.714,
+      "speaker": "SPEAKER_05",
+      "duration": 0.63,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00048",
+      "start": 338.444,
+      "end": 341.55400000000003,
+      "speaker": "SPEAKER_05",
+      "duration": 3.11,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00049",
+      "start": 349.324,
+      "end": 349.634,
+      "speaker": "SPEAKER_05",
+      "duration": 0.31,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00050",
+      "start": 351.48400000000004,
+      "end": 351.714,
+      "speaker": "SPEAKER_05",
+      "duration": 0.23,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00051",
+      "start": 358.36400000000003,
+      "end": 359.714,
+      "speaker": "SPEAKER_05",
+      "duration": 1.35,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00052",
+      "start": 364.924,
+      "end": 390.514,
+      "speaker": "SPEAKER_04",
+      "duration": 25.59,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00053",
+      "start": 378.36400000000003,
+      "end": 380.67400000000004,
+      "speaker": "SPEAKER_05",
+      "duration": 2.31,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00054",
+      "start": 390.92400000000004,
+      "end": 392.114,
+      "speaker": "SPEAKER_05",
+      "duration": 1.19,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00055",
+      "start": 392.124,
+      "end": 415.15400000000005,
+      "speaker": "SPEAKER_04",
+      "duration": 23.03,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00056",
+      "start": 398.684,
+      "end": 398.994,
+      "speaker": "SPEAKER_05",
+      "duration": 0.31,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00057",
+      "start": 413.724,
+      "end": 413.954,
+      "speaker": "SPEAKER_05",
+      "duration": 0.23,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00058",
+      "start": 415.564,
+      "end": 417.394,
+      "speaker": "SPEAKER_05",
+      "duration": 1.83,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00059",
+      "start": 417.964,
+      "end": 420.194,
+      "speaker": "SPEAKER_04",
+      "duration": 2.23,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00060",
+      "start": 419.084,
+      "end": 430.434,
+      "speaker": "SPEAKER_05",
+      "duration": 11.35,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00061",
+      "start": 423.004,
+      "end": 425.074,
+      "speaker": "SPEAKER_04",
+      "duration": 2.07,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00062",
+      "start": 430.604,
+      "end": 431.394,
+      "speaker": "SPEAKER_04",
+      "duration": 0.79,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00063",
+      "start": 431.80400000000003,
+      "end": 433.634,
+      "speaker": "SPEAKER_05",
+      "duration": 1.83,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00064",
+      "start": 433.884,
+      "end": 439.3929732620321,
+      "speaker": "SPEAKER_06",
+      "duration": 5.508973,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00065",
+      "start": 440.522816399287,
+      "end": 444.51206060606063,
+      "speaker": "SPEAKER_06",
+      "duration": 3.989244,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00066",
+      "start": 445.16198930481283,
+      "end": 474.74667023172907,
+      "speaker": "SPEAKER_03",
+      "duration": 29.584681,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00067",
+      "start": 475.15664171122995,
+      "end": 477.066256684492,
+      "speaker": "SPEAKER_06",
+      "duration": 1.909615,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00068",
+      "start": 476.51639928698756,
+      "end": 477.9460998217469,
+      "speaker": "SPEAKER_03",
+      "duration": 1.429701,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00069",
+      "start": 478.43605704099826,
+      "end": 478.9859144385027,
+      "speaker": "SPEAKER_06",
+      "duration": 0.549857,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00070",
+      "start": 479.3159001782531,
+      "end": 486.5045739750446,
+      "speaker": "SPEAKER_03",
+      "duration": 7.188674,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00071",
+      "start": 481.2355579322638,
+      "end": 481.70542959001784,
+      "speaker": "SPEAKER_06",
+      "duration": 0.469872,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00072",
+      "start": 487.07451693404636,
+      "end": 487.70436007130127,
+      "speaker": "SPEAKER_06",
+      "duration": 0.629843,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00073",
+      "start": 488.11433155080215,
+      "end": 515.0594830659536,
+      "speaker": "SPEAKER_03",
+      "duration": 26.945152,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00074",
+      "start": 515.0695258467023,
+      "end": 516.8991550802139,
+      "speaker": "SPEAKER_06",
+      "duration": 1.829629,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00075",
+      "start": 517.3091265597147,
+      "end": 529.2969447415329,
+      "speaker": "SPEAKER_03",
+      "duration": 11.987818,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00076",
+      "start": 529.7869019607842,
+      "end": 530.736688057041,
+      "speaker": "SPEAKER_06",
+      "duration": 0.949786,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00077",
+      "start": 531.1466595365418,
+      "end": 534.2560606060606,
+      "speaker": "SPEAKER_03",
+      "duration": 3.109401,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00078",
+      "start": 535.7058467023172,
+      "end": 548.1735793226381,
+      "speaker": "SPEAKER_03",
+      "duration": 12.467733,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00079",
+      "start": 548.9034937611408,
+      "end": 550.6531372549019,
+      "speaker": "SPEAKER_06",
+      "duration": 1.749643,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00080",
+      "start": 551.463037433155,
+      "end": 551.8529233511586,
+      "speaker": "SPEAKER_03",
+      "duration": 0.389886,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00081",
+      "start": 553.063,
+      "end": 583.063,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00082",
+      "start": 583.063,
+      "end": 596.965,
+      "speaker": "SPEAKER_03",
+      "duration": 13.902,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00083",
+      "start": 598.4146666666666,
+      "end": 610.4024848484848,
+      "speaker": "SPEAKER_03",
+      "duration": 11.987818,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00084",
+      "start": 618.8914108858057,
+      "end": 637.7593703308431,
+      "speaker": "SPEAKER_07",
+      "duration": 18.867959,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00085",
+      "start": 634.0897886872998,
+      "end": 634.3197374599786,
+      "speaker": "SPEAKER_03",
+      "duration": 0.229949,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00086",
+      "start": 639.5292081109925,
+      "end": 646.6384226254002,
+      "speaker": "SPEAKER_03",
+      "duration": 7.109215,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00087",
+      "start": 647.8483201707577,
+      "end": 677.435135538954,
+      "speaker": "SPEAKER_03",
+      "duration": 29.586815,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00088",
+      "start": 677.2051867662753,
+      "end": 677.5951184631804,
+      "speaker": "SPEAKER_07",
+      "duration": 0.389932,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00089",
+      "start": 678.645,
+      "end": 708.645,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00090",
+      "start": 708.645,
+      "end": 710.152,
+      "speaker": "SPEAKER_03",
+      "duration": 1.507,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00091",
+      "start": 711.2815496264674,
+      "end": 712.9513447171825,
+      "speaker": "SPEAKER_03",
+      "duration": 1.669795,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00092",
+      "start": 712.7213959445037,
+      "end": 717.0309092849519,
+      "speaker": "SPEAKER_07",
+      "duration": 4.309513,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00093",
+      "start": 715.6010885805763,
+      "end": 721.0304823906083,
+      "speaker": "SPEAKER_03",
+      "duration": 5.429394,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00094",
+      "start": 722.1603884738527,
+      "end": 726.5498932764141,
+      "speaker": "SPEAKER_03",
+      "duration": 4.389505,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00095",
+      "start": 727.6797993596584,
+      "end": 739.9884589114193,
+      "speaker": "SPEAKER_03",
+      "duration": 12.30866,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00096",
+      "start": 730.8794578441835,
+      "end": 731.1094066168623,
+      "speaker": "SPEAKER_07",
+      "duration": 0.229949,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00097",
+      "start": 740.3184503735325,
+      "end": 742.7881600853789,
+      "speaker": "SPEAKER_07",
+      "duration": 2.46971,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00098",
+      "start": 742.1582540021344,
+      "end": 762.466059765208,
+      "speaker": "SPEAKER_03",
+      "duration": 20.307806,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00099",
+      "start": 763.915935320869,
+      "end": 777.6645204648812,
+      "speaker": "SPEAKER_08",
+      "duration": 13.748585,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00100",
+      "start": 778.394,
+      "end": 808.394,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00101",
+      "start": 808.394,
+      "end": 828.139,
+      "speaker": "SPEAKER_03",
+      "duration": 19.745,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00102",
+      "start": 829.0293542193026,
+      "end": 832.3789903991915,
+      "speaker": "SPEAKER_08",
+      "duration": 3.349636,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00103",
+      "start": 833.5089014653865,
+      "end": 853.2568802425467,
+      "speaker": "SPEAKER_03",
+      "duration": 19.747979,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00104",
+      "start": 836.7885699848408,
+      "end": 839.0983112683173,
+      "speaker": "SPEAKER_08",
+      "duration": 2.309741,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00105",
+      "start": 854.3867913087417,
+      "end": 872.6949156139464,
+      "speaker": "SPEAKER_08",
+      "duration": 18.308124,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00106",
+      "start": 870.7051419909044,
+      "end": 870.9350934815564,
+      "speaker": "SPEAKER_03",
+      "duration": 0.229951,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00107",
+      "start": 872.9449156139464,
+      "end": 884.2137513895907,
+      "speaker": "SPEAKER_03",
+      "duration": 11.268836,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00108",
+      "start": 883.3438645780697,
+      "end": 892.7728863062152,
+      "speaker": "SPEAKER_08",
+      "duration": 9.429022,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00109",
+      "start": 890.543,
+      "end": 920.543,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00110",
+      "start": 894.3827488630621,
+      "end": 895.1726437594745,
+      "speaker": "SPEAKER_08",
+      "duration": 0.789895,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00111",
+      "start": 900.862093986862,
+      "end": 901.8119727134916,
+      "speaker": "SPEAKER_08",
+      "duration": 0.949879,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00112",
+      "start": 907.8213906013137,
+      "end": 908.3713097524002,
+      "speaker": "SPEAKER_08",
+      "duration": 0.549919,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00113",
+      "start": 920.543,
+      "end": 921.17,
+      "speaker": "SPEAKER_03",
+      "duration": 0.627,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00114",
+      "start": 922.54,
+      "end": 952.54,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00115",
+      "start": 938.06,
+      "end": 938.3699999999999,
+      "speaker": "SPEAKER_09",
+      "duration": 0.31,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00116",
+      "start": 946.06,
+      "end": 947.2499999999999,
+      "speaker": "SPEAKER_09",
+      "duration": 1.19,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00117",
+      "start": 952.54,
+      "end": 955.25,
+      "speaker": "SPEAKER_03",
+      "duration": 2.71,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00118",
+      "start": 956.4599999999999,
+      "end": 981.0899999999999,
+      "speaker": "SPEAKER_03",
+      "duration": 24.63,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00119",
+      "start": 958.3,
+      "end": 958.53,
+      "speaker": "SPEAKER_09",
+      "duration": 0.23,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00120",
+      "start": 980.78,
+      "end": 988.8499999999999,
+      "speaker": "SPEAKER_09",
+      "duration": 8.07,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00121",
+      "start": 983.4999999999999,
+      "end": 995.17,
+      "speaker": "SPEAKER_03",
+      "duration": 11.67,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00122",
+      "start": 994.62,
+      "end": 1024.62,
+      "speaker": "SPEAKER_09",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00123",
+      "start": 1024.62,
+      "end": 1037.49,
+      "speaker": "SPEAKER_09",
+      "duration": 12.87,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00124",
+      "start": 1032.4599999999998,
+      "end": 1032.6899999999998,
+      "speaker": "SPEAKER_03",
+      "duration": 0.23,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00125",
+      "start": 1038.62,
+      "end": 1039.25,
+      "speaker": "SPEAKER_03",
+      "duration": 0.63,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00126",
+      "start": 1039.1,
+      "end": 1046.37,
+      "speaker": "SPEAKER_09",
+      "duration": 7.27,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00127",
+      "start": 1047.34,
+      "end": 1077.34,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00128",
+      "start": 1049.74,
+      "end": 1050.77,
+      "speaker": "SPEAKER_09",
+      "duration": 1.03,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00129",
+      "start": 1059.8999999999999,
+      "end": 1060.2099999999998,
+      "speaker": "SPEAKER_09",
+      "duration": 0.31,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00130",
+      "start": 1077.34,
+      "end": 1101.33,
+      "speaker": "SPEAKER_03",
+      "duration": 23.99,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00131",
+      "start": 1086.1399999999999,
+      "end": 1087.57,
+      "speaker": "SPEAKER_09",
+      "duration": 1.43,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00132",
+      "start": 1101.58,
+      "end": 1108.7692160168597,
+      "speaker": "SPEAKER_03",
+      "duration": 7.189216,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00133",
+      "start": 1109.259190727081,
+      "end": 1121.807841938883,
+      "speaker": "SPEAKER_10",
+      "duration": 12.548651,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00134",
+      "start": 1123.2577154899893,
+      "end": 1137.8061559536354,
+      "speaker": "SPEAKER_10",
+      "duration": 14.54844,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00135",
+      "start": 1138.776080084299,
+      "end": 1140.2059030558482,
+      "speaker": "SPEAKER_03",
+      "duration": 1.429823,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00136",
+      "start": 1142.1357260273971,
+      "end": 1152.8445711275026,
+      "speaker": "SPEAKER_03",
+      "duration": 10.708845,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00137",
+      "start": 1154.9343772391992,
+      "end": 1156.2042170706006,
+      "speaker": "SPEAKER_03",
+      "duration": 1.26984,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00138",
+      "start": 1157.654090621707,
+      "end": 1159.2438967334035,
+      "speaker": "SPEAKER_03",
+      "duration": 1.589806,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00139",
+      "start": 1160.4537955742887,
+      "end": 1163.483449947313,
+      "speaker": "SPEAKER_03",
+      "duration": 3.029654,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00140",
+      "start": 1165.093306638567,
+      "end": 1175.0022360379346,
+      "speaker": "SPEAKER_03",
+      "duration": 9.908929,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00141",
+      "start": 1176.132143308746,
+      "end": 1205.7989905163329,
+      "speaker": "SPEAKER_03",
+      "duration": 29.666847,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00142",
+      "start": 1207.8088050579556,
+      "end": 1214.9180295047418,
+      "speaker": "SPEAKER_10",
+      "duration": 7.109224,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00143",
+      "start": 1212.688290832455,
+      "end": 1214.0381222339304,
+      "speaker": "SPEAKER_03",
+      "duration": 1.349831,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00144",
+      "start": 1215.2480210748156,
+      "end": 1226.7567818756586,
+      "speaker": "SPEAKER_03",
+      "duration": 11.508761,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00145",
+      "start": 1227.8066975763961,
+      "end": 1248.8344552160167,
+      "speaker": "SPEAKER_10",
+      "duration": 21.027758,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00146",
+      "start": 1257.0825530799475,
+      "end": 1262.5103197903015,
+      "speaker": "SPEAKER_11",
+      "duration": 5.427767,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00147",
+      "start": 1263.6399737876802,
+      "end": 1278.9838401048494,
+      "speaker": "SPEAKER_11",
+      "duration": 15.343866,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00148",
+      "start": 1279.7136513761468,
+      "end": 1280.1833682830932,
+      "speaker": "SPEAKER_03",
+      "duration": 0.469717,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00149",
+      "start": 1280.3533997378768,
+      "end": 1284.261764089122,
+      "speaker": "SPEAKER_11",
+      "duration": 3.908364,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00150",
+      "start": 1284.591732634338,
+      "end": 1289.5396880733945,
+      "speaker": "SPEAKER_03",
+      "duration": 4.947955,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00151",
+      "start": 1289.7097195281783,
+      "end": 1289.9395307994757,
+      "speaker": "SPEAKER_11",
+      "duration": 0.229811,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00152",
+      "start": 1290.669,
+      "end": 1320.669,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00153",
+      "start": 1310.0217300131062,
+      "end": 1310.4914469200523,
+      "speaker": "SPEAKER_11",
+      "duration": 0.469717,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00154",
+      "start": 1320.669,
+      "end": 1339.92,
+      "speaker": "SPEAKER_03",
+      "duration": 19.251,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00155",
+      "start": 1321.5372005242464,
+      "end": 1321.7670117955438,
+      "speaker": "SPEAKER_11",
+      "duration": 0.229811,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00156",
+      "start": 1330.653614678899,
+      "end": 1333.4424193971167,
+      "speaker": "SPEAKER_11",
+      "duration": 2.788805,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00157",
+      "start": 1336.8911612057666,
+      "end": 1337.2009410222804,
+      "speaker": "SPEAKER_11",
+      "duration": 0.30978,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00158",
+      "start": 1339.1302804718218,
+      "end": 1339.4400602883354,
+      "speaker": "SPEAKER_11",
+      "duration": 0.30978,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00159",
+      "start": 1340.8895884665792,
+      "end": 1344.7979528178244,
+      "speaker": "SPEAKER_11",
+      "duration": 3.908364,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00160",
+      "start": 1343.3686133682831,
+      "end": 1346.2373866317168,
+      "speaker": "SPEAKER_03",
+      "duration": 2.868773,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00161",
+      "start": 1346.4074180865007,
+      "end": 1350.395750982962,
+      "speaker": "SPEAKER_11",
+      "duration": 3.988333,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00162",
+      "start": 1351.5254049803407,
+      "end": 1362.790875491481,
+      "speaker": "SPEAKER_11",
+      "duration": 11.265471,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00163",
+      "start": 1363.360749672346,
+      "end": 1367.6689567496724,
+      "speaker": "SPEAKER_03",
+      "duration": 4.308207,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00164",
+      "start": 1366.3195858453473,
+      "end": 1370.787730013106,
+      "speaker": "SPEAKER_11",
+      "duration": 4.468144,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00165",
+      "start": 1372.3971952817824,
+      "end": 1375.0260629095676,
+      "speaker": "SPEAKER_11",
+      "duration": 2.628868,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00166",
+      "start": 1375.996,
+      "end": 1405.996,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00167",
+      "start": 1385.3533475935828,
+      "end": 1386.303026737968,
+      "speaker": "SPEAKER_12",
+      "duration": 0.949679,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00168",
+      "start": 1400.8691978609625,
+      "end": 1401.8988556149732,
+      "speaker": "SPEAKER_12",
+      "duration": 1.029658,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00169",
+      "start": 1405.996,
+      "end": 1426.372,
+      "speaker": "SPEAKER_03",
+      "duration": 20.376,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00170",
+      "start": 1410.866524064171,
+      "end": 1411.4163101604277,
+      "speaker": "SPEAKER_12",
+      "duration": 0.549786,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00171",
+      "start": 1422.943294117647,
+      "end": 1423.653037433155,
+      "speaker": "SPEAKER_12",
+      "duration": 0.709743,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00172",
+      "start": 1427.3421176470588,
+      "end": 1443.3277754010694,
+      "speaker": "SPEAKER_12",
+      "duration": 15.985658,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00173",
+      "start": 1443.7377326203207,
+      "end": 1469.0808877005347,
+      "speaker": "SPEAKER_03",
+      "duration": 25.343155,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00174",
+      "start": 1451.655614973262,
+      "end": 1453.804973262032,
+      "speaker": "SPEAKER_12",
+      "duration": 2.149358,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00175",
+      "start": 1458.9336684491977,
+      "end": 1459.9633262032085,
+      "speaker": "SPEAKER_12",
+      "duration": 1.029658,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00176",
+      "start": 1470.3706096256683,
+      "end": 1492.9145133689838,
+      "speaker": "SPEAKER_03",
+      "duration": 22.543904,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00177",
+      "start": 1491.0850695187164,
+      "end": 1491.3149411764705,
+      "speaker": "SPEAKER_12",
+      "duration": 0.229872,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00178",
+      "start": 1492.7646203208556,
+      "end": 1494.1941711229945,
+      "speaker": "SPEAKER_12",
+      "duration": 1.429551,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00179",
+      "start": 1495.6438703703705,
+      "end": 1503.472,
+      "speaker": "SPEAKER_03",
+      "duration": 7.82813,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00180",
+      "start": 1496.8435925925926,
+      "end": 1498.0332592592592,
+      "speaker": "SPEAKER_13",
+      "duration": 1.189667,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00181",
+      "start": 1503.6420185185186,
+      "end": 1506.111388888889,
+      "speaker": "SPEAKER_13",
+      "duration": 2.46937,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00182",
+      "start": 1505.2416481481482,
+      "end": 1505.471537037037,
+      "speaker": "SPEAKER_03",
+      "duration": 0.229889,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00183",
+      "start": 1507.5611111111111,
+      "end": 1510.8302962962964,
+      "speaker": "SPEAKER_13",
+      "duration": 3.269185,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00184",
+      "start": 1511.8001296296297,
+      "end": 1512.9098148148148,
+      "speaker": "SPEAKER_03",
+      "duration": 1.109685,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00185",
+      "start": 1513.1598148148148,
+      "end": 1517.5487407407409,
+      "speaker": "SPEAKER_13",
+      "duration": 4.388926,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00186",
+      "start": 1514.5994814814815,
+      "end": 1520.748,
+      "speaker": "SPEAKER_03",
+      "duration": 6.148519,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00187",
+      "start": 1519.4783518518518,
+      "end": 1522.747537037037,
+      "speaker": "SPEAKER_13",
+      "duration": 3.269185,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00188",
+      "start": 1523.477425925926,
+      "end": 1537.1442037037039,
+      "speaker": "SPEAKER_03",
+      "duration": 13.666778,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00189",
+      "start": 1532.0354444444445,
+      "end": 1533.6250185185186,
+      "speaker": "SPEAKER_13",
+      "duration": 1.589574,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00190",
+      "start": 1536.7543518518519,
+      "end": 1541.4632037037038,
+      "speaker": "SPEAKER_13",
+      "duration": 4.708852,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00191",
+      "start": 1541.8731666666667,
+      "end": 1552.0207592592594,
+      "speaker": "SPEAKER_03",
+      "duration": 10.147593,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00192",
+      "start": 1544.7525,
+      "end": 1545.462277777778,
+      "speaker": "SPEAKER_13",
+      "duration": 0.709778,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00193",
+      "start": 1550.0312777777779,
+      "end": 1550.7410555555557,
+      "speaker": "SPEAKER_13",
+      "duration": 0.709778,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00194",
+      "start": 1552.4307222222224,
+      "end": 1554.980074074074,
+      "speaker": "SPEAKER_13",
+      "duration": 2.549352,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00195",
+      "start": 1554.9101481481482,
+      "end": 1556.5797037037037,
+      "speaker": "SPEAKER_03",
+      "duration": 1.669556,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00196",
+      "start": 1556.2698333333335,
+      "end": 1560.8187222222223,
+      "speaker": "SPEAKER_13",
+      "duration": 4.548889,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00197",
+      "start": 1560.6688148148148,
+      "end": 1571.216314814815,
+      "speaker": "SPEAKER_03",
+      "duration": 10.5475,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00198",
+      "start": 1569.7867037037038,
+      "end": 1574.6555185185186,
+      "speaker": "SPEAKER_13",
+      "duration": 4.868815,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00199",
+      "start": 1574.7455555555557,
+      "end": 1592.4114074074075,
+      "speaker": "SPEAKER_03",
+      "duration": 17.665852,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00200",
+      "start": 1579.944351851852,
+      "end": 1580.5741481481482,
+      "speaker": "SPEAKER_13",
+      "duration": 0.629796,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00201",
+      "start": 1590.1819814814814,
+      "end": 1597.6102037037037,
+      "speaker": "SPEAKER_13",
+      "duration": 7.428222,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00202",
+      "start": 1597.1403703703704,
+      "end": 1600.5695185185186,
+      "speaker": "SPEAKER_03",
+      "duration": 3.429148,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00203",
+      "start": 1598.899962962963,
+      "end": 1606.5681296296298,
+      "speaker": "SPEAKER_13",
+      "duration": 7.668167,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00204",
+      "start": 1607.1380555555556,
+      "end": 1631.522351851852,
+      "speaker": "SPEAKER_03",
+      "duration": 24.384296,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00205",
+      "start": 1615.1362037037038,
+      "end": 1615.766,
+      "speaker": "SPEAKER_13",
+      "duration": 0.629796,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00206",
+      "start": 1617.5356481481483,
+      "end": 1619.3651666666667,
+      "speaker": "SPEAKER_13",
+      "duration": 1.829519,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00207",
+      "start": 1631.3724444444445,
+      "end": 1632.4021481481482,
+      "speaker": "SPEAKER_13",
+      "duration": 1.029704,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00208",
+      "start": 1633.852,
+      "end": 1635.4420000000002,
+      "speaker": "SPEAKER_03",
+      "duration": 1.59,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00209",
+      "start": 1635.2120000000002,
+      "end": 1639.2020000000002,
+      "speaker": "SPEAKER_14",
+      "duration": 3.99,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00210",
+      "start": 1640.172,
+      "end": 1670.172,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00211",
+      "start": 1670.172,
+      "end": 1685.362,
+      "speaker": "SPEAKER_03",
+      "duration": 15.19,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00212",
+      "start": 1686.0120000000002,
+      "end": 1688.9620000000002,
+      "speaker": "SPEAKER_14",
+      "duration": 2.95,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00213",
+      "start": 1689.132,
+      "end": 1692.8020000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 3.67,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00214",
+      "start": 1693.6920000000002,
+      "end": 1694.162,
+      "speaker": "SPEAKER_14",
+      "duration": 0.47,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00215",
+      "start": 1694.4920000000002,
+      "end": 1709.5220000000002,
+      "speaker": "SPEAKER_03",
+      "duration": 15.03,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00216",
+      "start": 1710.652,
+      "end": 1724.4820000000002,
+      "speaker": "SPEAKER_03",
+      "duration": 13.83,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00217",
+      "start": 1724.2520000000002,
+      "end": 1728.402,
+      "speaker": "SPEAKER_14",
+      "duration": 4.15,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00218",
+      "start": 1728.892,
+      "end": 1743.0420000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 14.15,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00219",
+      "start": 1743.6920000000002,
+      "end": 1745.842,
+      "speaker": "SPEAKER_14",
+      "duration": 2.15,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00220",
+      "start": 1746.7320000000002,
+      "end": 1750.642,
+      "speaker": "SPEAKER_03",
+      "duration": 3.91,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00221",
+      "start": 1751.4520000000002,
+      "end": 1765.7620000000002,
+      "speaker": "SPEAKER_14",
+      "duration": 14.31,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00222",
+      "start": 1765.9320000000002,
+      "end": 1767.842,
+      "speaker": "SPEAKER_03",
+      "duration": 1.91,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00223",
+      "start": 1767.0520000000001,
+      "end": 1770.4820000000002,
+      "speaker": "SPEAKER_14",
+      "duration": 3.43,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00224",
+      "start": 1772.2520000000002,
+      "end": 1780.3220000000001,
+      "speaker": "SPEAKER_14",
+      "duration": 8.07,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00225",
+      "start": 1781.5320000000002,
+      "end": 1795.7620000000002,
+      "speaker": "SPEAKER_14",
+      "duration": 14.23,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00226",
+      "start": 1796.4920000000002,
+      "end": 1806.882,
+      "speaker": "SPEAKER_03",
+      "duration": 10.39,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00227",
+      "start": 1808.092,
+      "end": 1813.0420000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 4.95,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00228",
+      "start": 1813.2920000000001,
+      "end": 1841.2287169811323,
+      "speaker": "SPEAKER_03",
+      "duration": 27.936717,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00229",
+      "start": 1817.204603773585,
+      "end": 1817.9127924528304,
+      "speaker": "SPEAKER_15",
+      "duration": 0.708189,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00230",
+      "start": 1827.9043773584908,
+      "end": 1828.3730188679247,
+      "speaker": "SPEAKER_15",
+      "duration": 0.468642,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00231",
+      "start": 1840.2809811320756,
+      "end": 1844.103283018868,
+      "speaker": "SPEAKER_15",
+      "duration": 3.822302,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00232",
+      "start": 1844.9920754716982,
+      "end": 1846.4189056603775,
+      "speaker": "SPEAKER_03",
+      "duration": 1.42683,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00233",
+      "start": 1847.708,
+      "end": 1877.708,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00234",
+      "start": 1877.708,
+      "end": 1888.89,
+      "speaker": "SPEAKER_03",
+      "duration": 11.182,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00235",
+      "start": 1889.6202658170232,
+      "end": 1901.0481392808374,
+      "speaker": "SPEAKER_16",
+      "duration": 11.427873,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00236",
+      "start": 1901.698,
+      "end": 1931.698,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00237",
+      "start": 1931.698,
+      "end": 1949.839,
+      "speaker": "SPEAKER_03",
+      "duration": 18.141,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00238",
+      "start": 1950.729137915339,
+      "end": 1953.9185116067363,
+      "speaker": "SPEAKER_16",
+      "duration": 3.189374,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00239",
+      "start": 1954.888,
+      "end": 1984.888,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00240",
+      "start": 1984.888,
+      "end": 1986.233,
+      "speaker": "SPEAKER_03",
+      "duration": 1.345,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00241",
+      "start": 1987.3624670004551,
+      "end": 2007.9886654528902,
+      "speaker": "SPEAKER_03",
+      "duration": 20.626198,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00242",
+      "start": 2009.1185052344106,
+      "end": 2015.8272380518888,
+      "speaker": "SPEAKER_03",
+      "duration": 6.708733,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00243",
+      "start": 2024.3158679504813,
+      "end": 2026.9456038514443,
+      "speaker": "SPEAKER_17",
+      "duration": 2.629736,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00244",
+      "start": 2028.316,
+      "end": 2058.316,
+      "speaker": "SPEAKER_17",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00245",
+      "start": 2047.9137038055937,
+      "end": 2049.7435130674003,
+      "speaker": "SPEAKER_03",
+      "duration": 1.829809,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00246",
+      "start": 2058.316,
+      "end": 2063.502,
+      "speaker": "SPEAKER_17",
+      "duration": 5.186,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00247",
+      "start": 2065.192119211371,
+      "end": 2071.9014809720315,
+      "speaker": "SPEAKER_03",
+      "duration": 6.709362,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00248",
+      "start": 2073.031,
+      "end": 2103.031,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00249",
+      "start": 2074.471268225585,
+      "end": 2074.7012242090786,
+      "speaker": "SPEAKER_17",
+      "duration": 0.229956,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00250",
+      "start": 2090.229823016965,
+      "end": 2090.5397716643743,
+      "speaker": "SPEAKER_17",
+      "duration": 0.309949,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00251",
+      "start": 2103.031,
+      "end": 2110.858,
+      "speaker": "SPEAKER_03",
+      "duration": 7.827,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00252",
+      "start": 2110.0680036680424,
+      "end": 2110.297959651536,
+      "speaker": "SPEAKER_17",
+      "duration": 0.229956,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00253",
+      "start": 2111.667856946355,
+      "end": 2114.8575414947272,
+      "speaker": "SPEAKER_17",
+      "duration": 3.189685,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00254",
+      "start": 2115.667490142137,
+      "end": 2117.4972994039435,
+      "speaker": "SPEAKER_03",
+      "duration": 1.829809,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00255",
+      "start": 2116.467416781293,
+      "end": 2118.2972260430997,
+      "speaker": "SPEAKER_17",
+      "duration": 1.829809,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00256",
+      "start": 2118.6272187070153,
+      "end": 2132.935883539661,
+      "speaker": "SPEAKER_03",
+      "duration": 14.308665,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00257",
+      "start": 2127.3464190738196,
+      "end": 2127.7363603851445,
+      "speaker": "SPEAKER_17",
+      "duration": 0.389941,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00258",
+      "start": 2131.2660596056858,
+      "end": 2131.4960155891795,
+      "speaker": "SPEAKER_17",
+      "duration": 0.229956,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00259",
+      "start": 2132.705927556167,
+      "end": 2152.9340495185697,
+      "speaker": "SPEAKER_17",
+      "duration": 20.228122,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00260",
+      "start": 2154.0639688216415,
+      "end": 2165.0129417698304,
+      "speaker": "SPEAKER_17",
+      "duration": 10.948973,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00261",
+      "start": 2158.783535992664,
+      "end": 2160.1333892709767,
+      "speaker": "SPEAKER_03",
+      "duration": 1.349853,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00262",
+      "start": 2165.9828757450714,
+      "end": 2168.9325823016966,
+      "speaker": "SPEAKER_03",
+      "duration": 2.949707,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00263",
+      "start": 2170.2224869326,
+      "end": 2178.6916872994043,
+      "speaker": "SPEAKER_03",
+      "duration": 8.4692,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00264",
+      "start": 2180.1415772581386,
+      "end": 2182.8513058230174,
+      "speaker": "SPEAKER_03",
+      "duration": 2.709729,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00265",
+      "start": 2184.5411737734985,
+      "end": 2185.8910270518113,
+      "speaker": "SPEAKER_03",
+      "duration": 1.349853,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00266",
+      "start": 2189.3407336084365,
+      "end": 2190.2106309032556,
+      "speaker": "SPEAKER_03",
+      "duration": 0.869897,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00267",
+      "start": 2190.9405868867493,
+      "end": 2191.890476845484,
+      "speaker": "SPEAKER_17",
+      "duration": 0.94989,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00268",
+      "start": 2191.3405502063274,
+      "end": 2193.7303081155437,
+      "speaker": "SPEAKER_03",
+      "duration": 2.389758,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00269",
+      "start": 2199.179627152989,
+      "end": 2200.609286727457,
+      "speaker": "SPEAKER_18",
+      "duration": 1.42966,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00270",
+      "start": 2201.9790597771025,
+      "end": 2203.2487517730497,
+      "speaker": "SPEAKER_19",
+      "duration": 1.269692,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00271",
+      "start": 2204.378573454914,
+      "end": 2206.128168186424,
+      "speaker": "SPEAKER_19",
+      "duration": 1.749595,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00272",
+      "start": 2204.8584761904763,
+      "end": 2205.088378926039,
+      "speaker": "SPEAKER_18",
+      "duration": 0.229903,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00273",
+      "start": 2207.257989868288,
+      "end": 2211.0871631205673,
+      "speaker": "SPEAKER_18",
+      "duration": 3.829173,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00274",
+      "start": 2209.6575035460996,
+      "end": 2212.366903748734,
+      "speaker": "SPEAKER_19",
+      "duration": 2.7094,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00275",
+      "start": 2213.97662816616,
+      "end": 2220.125331306991,
+      "speaker": "SPEAKER_19",
+      "duration": 6.148703,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00276",
+      "start": 2220.375331306991,
+      "end": 2221.005152988855,
+      "speaker": "SPEAKER_20",
+      "duration": 0.629822,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00277",
+      "start": 2221.895023302938,
+      "end": 2224.7643910840934,
+      "speaker": "SPEAKER_19",
+      "duration": 2.869368,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00278",
+      "start": 2226.0541803444785,
+      "end": 2231.323061803445,
+      "speaker": "SPEAKER_19",
+      "duration": 5.268881,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00279",
+      "start": 2232.452883485309,
+      "end": 2236.681975683891,
+      "speaker": "SPEAKER_19",
+      "duration": 4.229092,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00280",
+      "start": 2237.8917811550155,
+      "end": 2249.2394305977714,
+      "speaker": "SPEAKER_19",
+      "duration": 11.347649,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00281",
+      "start": 2250.929138804458,
+      "end": 2271.075005065856,
+      "speaker": "SPEAKER_19",
+      "duration": 20.145866,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00282",
+      "start": 2272.284810536981,
+      "end": 2275.8740324214796,
+      "speaker": "SPEAKER_19",
+      "duration": 3.589222,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00283",
+      "start": 2276.3639837892606,
+      "end": 2280.992994934144,
+      "speaker": "SPEAKER_20",
+      "duration": 4.629011,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00284",
+      "start": 2280.9230597771025,
+      "end": 2284.9921843971633,
+      "speaker": "SPEAKER_19",
+      "duration": 4.069125,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00285",
+      "start": 2285.4821357649444,
+      "end": 2286.2719250253294,
+      "speaker": "SPEAKER_20",
+      "duration": 0.789789,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00286",
+      "start": 2286.6818926038504,
+      "end": 2288.031568389058,
+      "speaker": "SPEAKER_19",
+      "duration": 1.349676,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00287",
+      "start": 2289.3213576494427,
+      "end": 2314.1862674772037,
+      "speaker": "SPEAKER_19",
+      "duration": 24.86491,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00288",
+      "start": 2314.916,
+      "end": 2344.916,
+      "speaker": "SPEAKER_20",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00289",
+      "start": 2324.1143059777105,
+      "end": 2324.5041762917936,
+      "speaker": "SPEAKER_19",
+      "duration": 0.38987,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00290",
+      "start": 2344.916,
+      "end": 2354.338,
+      "speaker": "SPEAKER_20",
+      "duration": 9.422,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00291",
+      "start": 2355.8678218923933,
+      "end": 2357.377332096475,
+      "speaker": "SPEAKER_21",
+      "duration": 1.50951,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00292",
+      "start": 2358.4271094619667,
+      "end": 2364.8152615955473,
+      "speaker": "SPEAKER_03",
+      "duration": 6.388152,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00293",
+      "start": 2365.945016697588,
+      "end": 2372.3331688311687,
+      "speaker": "SPEAKER_03",
+      "duration": 6.388152,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00294",
+      "start": 2373.463,
+      "end": 2403.463,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00295",
+      "start": 2403.463,
+      "end": 2412.962,
+      "speaker": "SPEAKER_03",
+      "duration": 9.499,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00296",
+      "start": 2414.171591836735,
+      "end": 2436.875202226345,
+      "speaker": "SPEAKER_21",
+      "duration": 22.70361,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00297",
+      "start": 2438.164912801484,
+      "end": 2457.5894359925787,
+      "speaker": "SPEAKER_21",
+      "duration": 19.424523,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00298",
+      "start": 2457.999391465677,
+      "end": 2466.7868756957328,
+      "speaker": "SPEAKER_03",
+      "duration": 8.787484,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00299",
+      "start": 2463.757788497217,
+      "end": 2464.787432282004,
+      "speaker": "SPEAKER_21",
+      "duration": 1.029644,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00300",
+      "start": 2467.27680890538,
+      "end": 2471.5055621521337,
+      "speaker": "SPEAKER_21",
+      "duration": 4.228753,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00301",
+      "start": 2472.875250463822,
+      "end": 2481.5827569573285,
+      "speaker": "SPEAKER_21",
+      "duration": 8.707506,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00302",
+      "start": 2482.712512059369,
+      "end": 2484.6219109461967,
+      "speaker": "SPEAKER_21",
+      "duration": 1.909399,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00303",
+      "start": 2485.1918218923934,
+      "end": 2490.540263450835,
+      "speaker": "SPEAKER_03",
+      "duration": 5.348442,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00304",
+      "start": 2487.6711317254176,
+      "end": 2488.14093135436,
+      "speaker": "SPEAKER_21",
+      "duration": 0.4698,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00305",
+      "start": 2491.6700185528757,
+      "end": 2500.3775250463823,
+      "speaker": "SPEAKER_03",
+      "duration": 8.707506,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00306",
+      "start": 2501.9071688311687,
+      "end": 2517.172849721707,
+      "speaker": "SPEAKER_03",
+      "duration": 15.265681,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00307",
+      "start": 2505.2662337662337,
+      "end": 2505.7360333951765,
+      "speaker": "SPEAKER_21",
+      "duration": 0.4698,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00308",
+      "start": 2518.6225157699446,
+      "end": 2524.3708460111316,
+      "speaker": "SPEAKER_03",
+      "duration": 5.74833,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00309",
+      "start": 2525.8205120593693,
+      "end": 2526.7701781076066,
+      "speaker": "SPEAKER_03",
+      "duration": 0.949666,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00310",
+      "start": 2528.219944083874,
+      "end": 2539.0888337493757,
+      "speaker": "SPEAKER_03",
+      "duration": 10.86889,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00311",
+      "start": 2540.458721917124,
+      "end": 2547.8079630554166,
+      "speaker": "SPEAKER_03",
+      "duration": 7.349241,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00312",
+      "start": 2549.0978592111833,
+      "end": 2557.726972541188,
+      "speaker": "SPEAKER_22",
+      "duration": 8.629113,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00313",
+      "start": 2559.4168287568646,
+      "end": 2562.3665092361457,
+      "speaker": "SPEAKER_03",
+      "duration": 2.94968,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00314",
+      "start": 2564.0563654518223,
+      "end": 2589.0838412381427,
+      "speaker": "SPEAKER_03",
+      "duration": 25.027476,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00315",
+      "start": 2572.695502745881,
+      "end": 2572.9254548177732,
+      "speaker": "SPEAKER_22",
+      "duration": 0.229952,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00316",
+      "start": 2586.1341607588615,
+      "end": 2586.4441048427357,
+      "speaker": "SPEAKER_22",
+      "duration": 0.309944,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00317",
+      "start": 2597.7330024962553,
+      "end": 2625.560198701947,
+      "speaker": "SPEAKER_22",
+      "duration": 27.827196,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00318",
+      "start": 2601.812595107339,
+      "end": 2602.042547179231,
+      "speaker": "SPEAKER_03",
+      "duration": 0.229952,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00319",
+      "start": 2625.810198701947,
+      "end": 2626.120142785821,
+      "speaker": "SPEAKER_03",
+      "duration": 0.309944,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00320",
+      "start": 2626.69,
+      "end": 2656.69,
+      "speaker": "SPEAKER_22",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00321",
+      "start": 2641.8086010983525,
+      "end": 2642.1985371942087,
+      "speaker": "SPEAKER_03",
+      "duration": 0.389936,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00322",
+      "start": 2656.69,
+      "end": 2664.036,
+      "speaker": "SPEAKER_22",
+      "duration": 7.346,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00323",
+      "start": 2664.766308537194,
+      "end": 2665.0762526210683,
+      "speaker": "SPEAKER_03",
+      "duration": 0.309944,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00324",
+      "start": 2665.3262526210683,
+      "end": 2687.074055916126,
+      "speaker": "SPEAKER_22",
+      "duration": 21.747803,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00325",
+      "start": 2688.043951045385,
+      "end": 2701.5497409484956,
+      "speaker": "SPEAKER_03",
+      "duration": 13.50579,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00326",
+      "start": 2702.8394227434983,
+      "end": 2725.382446710862,
+      "speaker": "SPEAKER_03",
+      "duration": 22.543024,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00327",
+      "start": 2711.316828148904,
+      "end": 2711.706632330444,
+      "speaker": "SPEAKER_23",
+      "duration": 0.389804,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00328",
+      "start": 2713.2362406935235,
+      "end": 2715.065604283529,
+      "speaker": "SPEAKER_23",
+      "duration": 1.829364,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00329",
+      "start": 2722.993254462009,
+      "end": 2729.7811004589494,
+      "speaker": "SPEAKER_23",
+      "duration": 6.787846,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00330",
+      "start": 2729.791173890872,
+      "end": 2734.499656297807,
+      "speaker": "SPEAKER_03",
+      "duration": 4.708482,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00331",
+      "start": 2735.78933809281,
+      "end": 2744.1766945436,
+      "speaker": "SPEAKER_03",
+      "duration": 8.387356,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00332",
+      "start": 2744.4266945436,
+      "end": 2758.4923131055584,
+      "speaker": "SPEAKER_23",
+      "duration": 14.065619,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00333",
+      "start": 2746.186156042835,
+      "end": 2747.4556909739927,
+      "speaker": "SPEAKER_03",
+      "duration": 1.269535,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00334",
+      "start": 2756.0231453340134,
+      "end": 2761.451407445181,
+      "speaker": "SPEAKER_03",
+      "duration": 5.428262,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00335",
+      "start": 2760.581750127486,
+      "end": 2769.6089107598164,
+      "speaker": "SPEAKER_23",
+      "duration": 9.027161,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00336",
+      "start": 2771.2984701682817,
+      "end": 2771.768249872514,
+      "speaker": "SPEAKER_23",
+      "duration": 0.46978,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00337",
+      "start": 2773.5377848036715,
+      "end": 2774.8872952575216,
+      "speaker": "SPEAKER_23",
+      "duration": 1.34951,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00338",
+      "start": 2776.656830188679,
+      "end": 2777.5264875063745,
+      "speaker": "SPEAKER_23",
+      "duration": 0.869657,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00339",
+      "start": 2778.016414074452,
+      "end": 2781.605239163692,
+      "speaker": "SPEAKER_03",
+      "duration": 3.588825,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00340",
+      "start": 2782.0951657317696,
+      "end": 2793.841494135645,
+      "speaker": "SPEAKER_23",
+      "duration": 11.746328,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00341",
+      "start": 2794.9712248852625,
+      "end": 2814.555154513004,
+      "speaker": "SPEAKER_23",
+      "duration": 19.58393,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00342",
+      "start": 2796.8906374298826,
+      "end": 2797.120490566038,
+      "speaker": "SPEAKER_03",
+      "duration": 0.229853,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00343",
+      "start": 2805.847895971443,
+      "end": 2806.0777491075983,
+      "speaker": "SPEAKER_03",
+      "duration": 0.229853,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00344",
+      "start": 2819.923587965324,
+      "end": 2820.633294237634,
+      "speaker": "SPEAKER_03",
+      "duration": 0.709706,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00345",
+      "start": 2822.482804691484,
+      "end": 2843.666244773075,
+      "speaker": "SPEAKER_24",
+      "duration": 21.18344,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00346",
+      "start": 2845.5157070938217,
+      "end": 2852.5430416475974,
+      "speaker": "SPEAKER_25",
+      "duration": 7.027335,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00347",
+      "start": 2853.672719450801,
+      "end": 2864.378706636156,
+      "speaker": "SPEAKER_25",
+      "duration": 10.705987,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00348",
+      "start": 2864.8686187643025,
+      "end": 2866.3779743707096,
+      "speaker": "SPEAKER_26",
+      "duration": 1.509356,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00349",
+      "start": 2867.0278279176205,
+      "end": 2883.6516475972544,
+      "speaker": "SPEAKER_25",
+      "duration": 16.62382,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00350",
+      "start": 2884.86129610984,
+      "end": 2896.2870196796343,
+      "speaker": "SPEAKER_25",
+      "duration": 11.425724,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00351",
+      "start": 2896.936873226545,
+      "end": 2900.445496567506,
+      "speaker": "SPEAKER_26",
+      "duration": 3.508623,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00352",
+      "start": 2901.175,
+      "end": 2931.175,
+      "speaker": "SPEAKER_25",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00353",
+      "start": 2931.175,
+      "end": 2946.269,
+      "speaker": "SPEAKER_25",
+      "duration": 15.094,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00354",
+      "start": 2947.398390846682,
+      "end": 2959.5438508009156,
+      "speaker": "SPEAKER_25",
+      "duration": 12.14546,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00355",
+      "start": 2960.6735286041194,
+      "end": 2968.9803945080093,
+      "speaker": "SPEAKER_26",
+      "duration": 8.306866,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00356",
+      "start": 2969.39,
+      "end": 2999.39,
+      "speaker": "SPEAKER_25",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00357",
+      "start": 2999.39,
+      "end": 3018.482,
+      "speaker": "SPEAKER_25",
+      "duration": 19.092,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00358",
+      "start": 3020.092,
+      "end": 3028.0820000000003,
+      "speaker": "SPEAKER_27",
+      "duration": 7.99,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00359",
+      "start": 3028.7320000000004,
+      "end": 3031.0420000000004,
+      "speaker": "SPEAKER_28",
+      "duration": 2.31,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00360",
+      "start": 3031.9320000000002,
+      "end": 3032.6420000000003,
+      "speaker": "SPEAKER_27",
+      "duration": 0.71,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00361",
+      "start": 3034.012,
+      "end": 3042.1620000000003,
+      "speaker": "SPEAKER_27",
+      "duration": 8.15,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00362",
+      "start": 3043.3720000000003,
+      "end": 3062.322,
+      "speaker": "SPEAKER_27",
+      "duration": 18.95,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00363",
+      "start": 3063.3720000000003,
+      "end": 3068.242,
+      "speaker": "SPEAKER_27",
+      "duration": 4.87,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00364",
+      "start": 3068.7320000000004,
+      "end": 3073.842,
+      "speaker": "SPEAKER_28",
+      "duration": 5.11,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00365",
+      "start": 3075.2920000000004,
+      "end": 3076.6420000000003,
+      "speaker": "SPEAKER_27",
+      "duration": 1.35,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00366",
+      "start": 3078.092,
+      "end": 3079.442,
+      "speaker": "SPEAKER_27",
+      "duration": 1.35,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00367",
+      "start": 3080.492,
+      "end": 3082.802,
+      "speaker": "SPEAKER_27",
+      "duration": 2.31,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00368",
+      "start": 3083.8520000000003,
+      "end": 3103.1220000000003,
+      "speaker": "SPEAKER_27",
+      "duration": 19.27,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00369",
+      "start": 3103.532,
+      "end": 3107.762,
+      "speaker": "SPEAKER_28",
+      "duration": 4.23,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00370",
+      "start": 3108.4120000000003,
+      "end": 3126.802,
+      "speaker": "SPEAKER_27",
+      "duration": 18.39,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00371",
+      "start": 3127.9320000000002,
+      "end": 3133.5220000000004,
+      "speaker": "SPEAKER_27",
+      "duration": 5.59,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00372",
+      "start": 3134.8920000000003,
+      "end": 3144.6420000000003,
+      "speaker": "SPEAKER_27",
+      "duration": 9.75,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00373",
+      "start": 3145.7720000000004,
+      "end": 3149.922,
+      "speaker": "SPEAKER_28",
+      "duration": 4.15,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00374",
+      "start": 3150.8920000000003,
+      "end": 3159.5220000000004,
+      "speaker": "SPEAKER_27",
+      "duration": 8.63,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00375",
+      "start": 3160.652,
+      "end": 3164.9620000000004,
+      "speaker": "SPEAKER_27",
+      "duration": 4.31,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00376",
+      "start": 3166.572,
+      "end": 3174.322,
+      "speaker": "SPEAKER_27",
+      "duration": 7.75,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00377",
+      "start": 3176.012,
+      "end": 3206.012,
+      "speaker": "SPEAKER_29",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00378",
+      "start": 3206.012,
+      "end": 3211.358,
+      "speaker": "SPEAKER_29",
+      "duration": 5.346,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00379",
+      "start": 3222.007321965898,
+      "end": 3230.0764874623874,
+      "speaker": "SPEAKER_03",
+      "duration": 8.069165,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00380",
+      "start": 3232.086310932799,
+      "end": 3239.195572718155,
+      "speaker": "SPEAKER_03",
+      "duration": 7.109262,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00381",
+      "start": 3240.7254443329994,
+      "end": 3257.113775325978,
+      "speaker": "SPEAKER_03",
+      "duration": 16.388331,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00382",
+      "start": 3258.6436469408227,
+      "end": 3259.433542627884,
+      "speaker": "SPEAKER_03",
+      "duration": 0.789896,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00383",
+      "start": 3260.6434463390174,
+      "end": 3262.2332617853563,
+      "speaker": "SPEAKER_03",
+      "duration": 1.589815,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00384",
+      "start": 3263.3631735205618,
+      "end": 3265.1929648946843,
+      "speaker": "SPEAKER_03",
+      "duration": 1.829791,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00385",
+      "start": 3266.4028686058177,
+      "end": 3291.110365095286,
+      "speaker": "SPEAKER_03",
+      "duration": 24.707496,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00386",
+      "start": 3292.7202286860584,
+      "end": 3305.8288886659984,
+      "speaker": "SPEAKER_03",
+      "duration": 13.10866,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00387",
+      "start": 3307.038792377132,
+      "end": 3311.0283671013044,
+      "speaker": "SPEAKER_30",
+      "duration": 3.989575,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00388",
+      "start": 3312.478246740221,
+      "end": 3313.9080782347046,
+      "speaker": "SPEAKER_30",
+      "duration": 1.429831,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00389",
+      "start": 3315.2779658976933,
+      "end": 3318.7075967903716,
+      "speaker": "SPEAKER_30",
+      "duration": 3.429631,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00390",
+      "start": 3319.437548645938,
+      "end": 3331.906272818456,
+      "speaker": "SPEAKER_03",
+      "duration": 12.468724,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00391",
+      "start": 3333.3561524573724,
+      "end": 3334.5460080240723,
+      "speaker": "SPEAKER_03",
+      "duration": 1.189856,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00392",
+      "start": 3335.996,
+      "end": 3336.5460000000003,
+      "speaker": "SPEAKER_31",
+      "duration": 0.55,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00393",
+      "start": 3337.7560000000003,
+      "end": 3348.3860000000004,
+      "speaker": "SPEAKER_31",
+      "duration": 10.63,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00394",
+      "start": 3347.996,
+      "end": 3377.996,
+      "speaker": "SPEAKER_32",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00395",
+      "start": 3377.996,
+      "end": 3394.626,
+      "speaker": "SPEAKER_32",
+      "duration": 16.63,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00396",
+      "start": 3395.7560000000003,
+      "end": 3404.3860000000004,
+      "speaker": "SPEAKER_32",
+      "duration": 8.63,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00397",
+      "start": 3405.6760000000004,
+      "end": 3415.9060000000004,
+      "speaker": "SPEAKER_32",
+      "duration": 10.23,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00398",
+      "start": 3409.1960000000004,
+      "end": 3409.4260000000004,
+      "speaker": "SPEAKER_31",
+      "duration": 0.23,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00399",
+      "start": 3417.1960000000004,
+      "end": 3422.3860000000004,
+      "speaker": "SPEAKER_32",
+      "duration": 5.19,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00400",
+      "start": 3423.356,
+      "end": 3426.306,
+      "speaker": "SPEAKER_31",
+      "duration": 2.95,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00401",
+      "start": 3423.8360000000002,
+      "end": 3424.3860000000004,
+      "speaker": "SPEAKER_32",
+      "duration": 0.55,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00402",
+      "start": 3425.516,
+      "end": 3438.626,
+      "speaker": "SPEAKER_32",
+      "duration": 13.11,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00403",
+      "start": 3439.116,
+      "end": 3442.306,
+      "speaker": "SPEAKER_31",
+      "duration": 3.19,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00404",
+      "start": 3440.956,
+      "end": 3470.956,
+      "speaker": "SPEAKER_32",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00405",
+      "start": 3470.956,
+      "end": 3495.506,
+      "speaker": "SPEAKER_32",
+      "duration": 24.55,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00406",
+      "start": 3489.6760000000004,
+      "end": 3490.5460000000003,
+      "speaker": "SPEAKER_31",
+      "duration": 0.87,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00407",
+      "start": 3496.1560000000004,
+      "end": 3499.826,
+      "speaker": "SPEAKER_31",
+      "duration": 3.67,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00408",
+      "start": 3499.436,
+      "end": 3500.626,
+      "speaker": "SPEAKER_32",
+      "duration": 1.19,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00409",
+      "start": 3501.036,
+      "end": 3501.5860000000002,
+      "speaker": "SPEAKER_31",
+      "duration": 0.55,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00410",
+      "start": 3501.7560000000003,
+      "end": 3503.106,
+      "speaker": "SPEAKER_32",
+      "duration": 1.35,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00411",
+      "start": 3503.356,
+      "end": 3514.626,
+      "speaker": "SPEAKER_31",
+      "duration": 11.27,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00412",
+      "start": 3514.876,
+      "end": 3519.346,
+      "speaker": "SPEAKER_03",
+      "duration": 4.47,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00413",
+      "start": 3520.1560000000004,
+      "end": 3525.1060000000007,
+      "speaker": "SPEAKER_33",
+      "duration": 4.95,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00414",
+      "start": 3520.2360000000003,
+      "end": 3520.6260000000007,
+      "speaker": "SPEAKER_34",
+      "duration": 0.39,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00415",
+      "start": 3525.3560000000007,
+      "end": 3526.0660000000003,
+      "speaker": "SPEAKER_34",
+      "duration": 0.71,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00416",
+      "start": 3526.3960000000006,
+      "end": 3536.7060000000006,
+      "speaker": "SPEAKER_33",
+      "duration": 10.31,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00417",
+      "start": 3532.4760000000006,
+      "end": 3533.5860000000002,
+      "speaker": "SPEAKER_34",
+      "duration": 1.11,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00418",
+      "start": 3536.0760000000005,
+      "end": 3537.9860000000003,
+      "speaker": "SPEAKER_34",
+      "duration": 1.91,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00419",
+      "start": 3539.0360000000005,
+      "end": 3552.6260000000007,
+      "speaker": "SPEAKER_34",
+      "duration": 13.59,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00420",
+      "start": 3543.6760000000004,
+      "end": 3544.3060000000005,
+      "speaker": "SPEAKER_33",
+      "duration": 0.63,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00421",
+      "start": 3546.8760000000007,
+      "end": 3550.4660000000003,
+      "speaker": "SPEAKER_33",
+      "duration": 3.59,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00422",
+      "start": 3552.1560000000004,
+      "end": 3570.7860000000005,
+      "speaker": "SPEAKER_33",
+      "duration": 18.63,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00423",
+      "start": 3569.5160000000005,
+      "end": 3570.4660000000003,
+      "speaker": "SPEAKER_34",
+      "duration": 0.95,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00424",
+      "start": 3571.8360000000002,
+      "end": 3576.5460000000003,
+      "speaker": "SPEAKER_33",
+      "duration": 4.71,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00425",
+      "start": 3575.9160000000006,
+      "end": 3580.0660000000003,
+      "speaker": "SPEAKER_34",
+      "duration": 4.15,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00426",
+      "start": 3580.1560000000004,
+      "end": 3585.5860000000002,
+      "speaker": "SPEAKER_33",
+      "duration": 5.43,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00427",
+      "start": 3583.5960000000005,
+      "end": 3584.1460000000006,
+      "speaker": "SPEAKER_34",
+      "duration": 0.55,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00428",
+      "start": 3586.2360000000003,
+      "end": 3592.7860000000005,
+      "speaker": "SPEAKER_34",
+      "duration": 6.55,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00429",
+      "start": 3595.4360000000006,
+      "end": 3598.7060000000006,
+      "speaker": "SPEAKER_34",
+      "duration": 3.27,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00430",
+      "start": 3599.2760000000003,
+      "end": 3602.3060000000005,
+      "speaker": "SPEAKER_33",
+      "duration": 3.03,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00431",
+      "start": 3603.5160000000005,
+      "end": 3611.2660000000005,
+      "speaker": "SPEAKER_33",
+      "duration": 7.75,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00432",
+      "start": 3612.5560000000005,
+      "end": 3632.9460000000004,
+      "speaker": "SPEAKER_33",
+      "duration": 20.39,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00433",
+      "start": 3631.9160000000006,
+      "end": 3632.7860000000005,
+      "speaker": "SPEAKER_34",
+      "duration": 0.87,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00434",
+      "start": 3634.2360000000003,
+      "end": 3643.5060000000003,
+      "speaker": "SPEAKER_34",
+      "duration": 9.27,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00435",
+      "start": 3642.6360000000004,
+      "end": 3658.5460000000003,
+      "speaker": "SPEAKER_33",
+      "duration": 15.91,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00436",
+      "start": 3658.3960000000006,
+      "end": 3664.5460000000003,
+      "speaker": "SPEAKER_34",
+      "duration": 6.15,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00437",
+      "start": 3660.1560000000004,
+      "end": 3662.3060000000005,
+      "speaker": "SPEAKER_33",
+      "duration": 2.15,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00438",
+      "start": 3663.5160000000005,
+      "end": 3671.7460000000005,
+      "speaker": "SPEAKER_33",
+      "duration": 8.23,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00439",
+      "start": 3666.7160000000003,
+      "end": 3670.2260000000006,
+      "speaker": "SPEAKER_34",
+      "duration": 3.51,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00440",
+      "start": 3671.4360000000006,
+      "end": 3671.7460000000005,
+      "speaker": "SPEAKER_34",
+      "duration": 0.31,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00441",
+      "start": 3672.9560000000006,
+      "end": 3698.7860000000005,
+      "speaker": "SPEAKER_33",
+      "duration": 25.83,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00442",
+      "start": 3692.7160000000003,
+      "end": 3693.2660000000005,
+      "speaker": "SPEAKER_34",
+      "duration": 0.55,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00443",
+      "start": 3700.1560000000004,
+      "end": 3700.7860000000005,
+      "speaker": "SPEAKER_35",
+      "duration": 0.63,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00444",
+      "start": 3700.7960000000003,
+      "end": 3708.7860000000005,
+      "speaker": "SPEAKER_03",
+      "duration": 7.99,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00445",
+      "start": 3708.7960000000003,
+      "end": 3723.8260000000005,
+      "speaker": "SPEAKER_35",
+      "duration": 15.03,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00446",
+      "start": 3717.9960000000005,
+      "end": 3718.3060000000005,
+      "speaker": "SPEAKER_03",
+      "duration": 0.31,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00447",
+      "start": 3722.9560000000006,
+      "end": 3723.3460000000005,
+      "speaker": "SPEAKER_03",
+      "duration": 0.39,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00448",
+      "start": 3724.6360000000004,
+      "end": 3727.4260000000004,
+      "speaker": "SPEAKER_03",
+      "duration": 2.79,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00449",
+      "start": 3728.636,
+      "end": 3758.636,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00450",
+      "start": 3731.7560000000003,
+      "end": 3732.4660000000003,
+      "speaker": "SPEAKER_35",
+      "duration": 0.71,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00451",
+      "start": 3735.8360000000002,
+      "end": 3736.0660000000003,
+      "speaker": "SPEAKER_35",
+      "duration": 0.23,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00452",
+      "start": 3738.8760000000007,
+      "end": 3739.2660000000005,
+      "speaker": "SPEAKER_35",
+      "duration": 0.39,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00453",
+      "start": 3752.6360000000004,
+      "end": 3755.4260000000004,
+      "speaker": "SPEAKER_35",
+      "duration": 2.79,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00454",
+      "start": 3758.636,
+      "end": 3760.786,
+      "speaker": "SPEAKER_03",
+      "duration": 2.15,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00455",
+      "start": 3763.5960000000005,
+      "end": 3771.9860000000003,
+      "speaker": "SPEAKER_03",
+      "duration": 8.39,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00456",
+      "start": 3771.5960000000005,
+      "end": 3774.8660000000004,
+      "speaker": "SPEAKER_35",
+      "duration": 3.27,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00457",
+      "start": 3776.7156033057854,
+      "end": 3784.9409311294767,
+      "speaker": "SPEAKER_36",
+      "duration": 8.225328,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00458",
+      "start": 3785.751,
+      "end": 3815.751,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00459",
+      "start": 3815.751,
+      "end": 3837.552,
+      "speaker": "SPEAKER_03",
+      "duration": 21.801,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00460",
+      "start": 3838.7613994490357,
+      "end": 3841.7096363636365,
+      "speaker": "SPEAKER_03",
+      "duration": 2.948237,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00461",
+      "start": 3839.880782369146,
+      "end": 3842.1094159779614,
+      "speaker": "SPEAKER_36",
+      "duration": 2.228634,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00462",
+      "start": 3842.8391515151516,
+      "end": 3847.7063305785123,
+      "speaker": "SPEAKER_03",
+      "duration": 4.867179,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00463",
+      "start": 3846.0373884297524,
+      "end": 3853.3032451790637,
+      "speaker": "SPEAKER_36",
+      "duration": 7.265857,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00464",
+      "start": 3854.4327603305787,
+      "end": 3854.742451790634,
+      "speaker": "SPEAKER_03",
+      "duration": 0.309691,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00465",
+      "start": 3855.1523636363636,
+      "end": 3855.621966942149,
+      "speaker": "SPEAKER_36",
+      "duration": 0.469603,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00466",
+      "start": 3855.951922865014,
+      "end": 3860.9790137741047,
+      "speaker": "SPEAKER_03",
+      "duration": 5.027091,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00467",
+      "start": 3861.62879338843,
+      "end": 3865.4565454545454,
+      "speaker": "SPEAKER_36",
+      "duration": 3.827752,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00468",
+      "start": 3864.02747107438,
+      "end": 3867.4554435261707,
+      "speaker": "SPEAKER_03",
+      "duration": 3.427972,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00469",
+      "start": 3867.465575757576,
+      "end": 3872.9724022038567,
+      "speaker": "SPEAKER_36",
+      "duration": 5.506826,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00470",
+      "start": 3873.5422258953167,
+      "end": 3887.4444242424242,
+      "speaker": "SPEAKER_03",
+      "duration": 13.902198,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00471",
+      "start": 3886.7349531680443,
+      "end": 3887.6842920110194,
+      "speaker": "SPEAKER_36",
+      "duration": 0.949339,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00472",
+      "start": 3895.851306273063,
+      "end": 3898.8007158671594,
+      "speaker": "SPEAKER_37",
+      "duration": 2.94941,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00473",
+      "start": 3899.1307011070116,
+      "end": 3902.3200664206647,
+      "speaker": "SPEAKER_03",
+      "duration": 3.189365,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00474",
+      "start": 3903.1299630996314,
+      "end": 3907.039195571956,
+      "speaker": "SPEAKER_37",
+      "duration": 3.909232,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00475",
+      "start": 3904.009800738008,
+      "end": 3904.799608856089,
+      "speaker": "SPEAKER_03",
+      "duration": 0.789808,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00476",
+      "start": 3907.609,
+      "end": 3937.609,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00477",
+      "start": 3923.686169741698,
+      "end": 3924.875904059041,
+      "speaker": "SPEAKER_37",
+      "duration": 1.189734,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00478",
+      "start": 3937.609,
+      "end": 3952.311,
+      "speaker": "SPEAKER_03",
+      "duration": 14.702,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00479",
+      "start": 3941.2829225092255,
+      "end": 3942.1527158671593,
+      "speaker": "SPEAKER_37",
+      "duration": 0.869793,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00480",
+      "start": 3948.7215498154987,
+      "end": 3951.4310036900374,
+      "speaker": "SPEAKER_37",
+      "duration": 2.709454,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00481",
+      "start": 3952.640826568266,
+      "end": 3957.6698523985247,
+      "speaker": "SPEAKER_37",
+      "duration": 5.029026,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00482",
+      "start": 3956.640088560886,
+      "end": 3973.986841328414,
+      "speaker": "SPEAKER_03",
+      "duration": 17.346753,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00483",
+      "start": 3968.397918819189,
+      "end": 3968.9477712177127,
+      "speaker": "SPEAKER_37",
+      "duration": 0.549852,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00484",
+      "start": 3970.5575202952036,
+      "end": 3972.2271660516612,
+      "speaker": "SPEAKER_37",
+      "duration": 1.669646,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00485",
+      "start": 3973.9968856088567,
+      "end": 3976.9462952029526,
+      "speaker": "SPEAKER_37",
+      "duration": 2.94941,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00486",
+      "start": 3976.1564870848715,
+      "end": 3979.7457785977867,
+      "speaker": "SPEAKER_03",
+      "duration": 3.589292,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00487",
+      "start": 3979.7558228782295,
+      "end": 3980.9455571955723,
+      "speaker": "SPEAKER_37",
+      "duration": 1.189734,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00488",
+      "start": 3981.7554538745394,
+      "end": 3990.303830258303,
+      "speaker": "SPEAKER_03",
+      "duration": 8.548376,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00489",
+      "start": 3983.43514391144,
+      "end": 3984.1449667896686,
+      "speaker": "SPEAKER_37",
+      "duration": 0.709823,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00490",
+      "start": 3988.074287822879,
+      "end": 4004.781158671587,
+      "speaker": "SPEAKER_37",
+      "duration": 16.706871,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00491",
+      "start": 4005.9109963099636,
+      "end": 4014.53935793358,
+      "speaker": "SPEAKER_37",
+      "duration": 8.628362,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00492",
+      "start": 4014.8693431734323,
+      "end": 4041.654354243543,
+      "speaker": "SPEAKER_03",
+      "duration": 26.785011,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00493",
+      "start": 4042.4642509225096,
+      "end": 4043.4140295202956,
+      "speaker": "SPEAKER_37",
+      "duration": 0.949779,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00494",
+      "start": 4044.0639557195577,
+      "end": 4052.932273062731,
+      "speaker": "SPEAKER_03",
+      "duration": 8.868317,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00495",
+      "start": 4053.182273062731,
+      "end": 4060.290915129152,
+      "speaker": "SPEAKER_37",
+      "duration": 7.108642,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00496",
+      "start": 4061.580723247233,
+      "end": 4064.610118081181,
+      "speaker": "SPEAKER_37",
+      "duration": 3.029395,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00497",
+      "start": 4066.139687804878,
+      "end": 4081.961843902439,
+      "speaker": "SPEAKER_10",
+      "duration": 15.822156,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00498",
+      "start": 4081.252312195122,
+      "end": 4089.3982146341464,
+      "speaker": "SPEAKER_03",
+      "duration": 8.145902,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00499",
+      "start": 4089.488292682927,
+      "end": 4114.426,
+      "speaker": "SPEAKER_10",
+      "duration": 24.937707,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00500",
+      "start": 4106.120175609756,
+      "end": 4106.509863414634,
+      "speaker": "SPEAKER_03",
+      "duration": 0.389688,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00501",
+      "start": 4114.436117073171,
+      "end": 4114.745843902439,
+      "speaker": "SPEAKER_03",
+      "duration": 0.309727,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00502",
+      "start": 4115.875414634146,
+      "end": 4119.063736585365,
+      "speaker": "SPEAKER_10",
+      "duration": 3.188322,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00503",
+      "start": 4119.793502439024,
+      "end": 4120.183190243903,
+      "speaker": "SPEAKER_03",
+      "duration": 0.389688,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00504",
+      "start": 4121.39272195122,
+      "end": 4122.262175609756,
+      "speaker": "SPEAKER_10",
+      "duration": 0.869454,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00505",
+      "start": 4123.711590243903,
+      "end": 4129.858468292683,
+      "speaker": "SPEAKER_03",
+      "duration": 6.146878,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00506",
+      "start": 4131.467804878049,
+      "end": 4133.456712195122,
+      "speaker": "SPEAKER_03",
+      "duration": 1.988907,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00507",
+      "start": 4134.8261658536585,
+      "end": 4136.335307317073,
+      "speaker": "SPEAKER_03",
+      "duration": 1.509141,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00508",
+      "start": 4138.344448780488,
+      "end": 4139.5337463414635,
+      "speaker": "SPEAKER_03",
+      "duration": 1.189298,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00509",
+      "start": 4141.462926829268,
+      "end": 4161.123209756098,
+      "speaker": "SPEAKER_03",
+      "duration": 19.660283,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00510",
+      "start": 4162.492663414634,
+      "end": 4163.202195121951,
+      "speaker": "SPEAKER_03",
+      "duration": 0.709532,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00511",
+      "start": 4164.411832,
+      "end": 4170.719864,
+      "speaker": "SPEAKER_03",
+      "duration": 6.308032,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00512",
+      "start": 4172.01,
+      "end": 4202.01,
+      "speaker": "SPEAKER_03",
+      "duration": 30.0,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00513",
+      "start": 4180.487008,
+      "end": 4181.036768,
+      "speaker": "SPEAKER_38",
+      "duration": 0.54976,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00514",
+      "start": 4202.01,
+      "end": 4203.51,
+      "speaker": "SPEAKER_03",
+      "duration": 1.5,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00515",
+      "start": 4204.23988,
+      "end": 4217.105944,
+      "speaker": "SPEAKER_38",
+      "duration": 12.866064,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00516",
+      "start": 4212.157504,
+      "end": 4213.507024,
+      "speaker": "SPEAKER_03",
+      "duration": 1.34952,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00517",
+      "start": 4215.196592,
+      "end": 4216.226208,
+      "speaker": "SPEAKER_03",
+      "duration": 1.029616,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00518",
+      "start": 4217.915776,
+      "end": 4220.704864,
+      "speaker": "SPEAKER_03",
+      "duration": 2.789088,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00519",
+      "start": 4219.275368,
+      "end": 4231.9814799999995,
+      "speaker": "SPEAKER_38",
+      "duration": 12.706112,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00520",
+      "start": 4224.393832,
+      "end": 4224.623688,
+      "speaker": "SPEAKER_03",
+      "duration": 0.229856,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00521",
+      "start": 4228.312656,
+      "end": 4228.702464,
+      "speaker": "SPEAKER_03",
+      "duration": 0.389808,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00522",
+      "start": 4233.111216,
+      "end": 4235.98028,
+      "speaker": "SPEAKER_38",
+      "duration": 2.869064,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00523",
+      "start": 4236.070328,
+      "end": 4239.899104,
+      "speaker": "SPEAKER_03",
+      "duration": 3.828776,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00524",
+      "start": 4237.669848,
+      "end": 4242.218408,
+      "speaker": "SPEAKER_38",
+      "duration": 4.54856,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00525",
+      "start": 4242.148504,
+      "end": 4242.37836,
+      "speaker": "SPEAKER_03",
+      "duration": 0.229856,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00526",
+      "start": 4244.867688,
+      "end": 4255.8143279999995,
+      "speaker": "SPEAKER_38",
+      "duration": 10.94664,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00527",
+      "start": 4256.384231999999,
+      "end": 4263.252096,
+      "speaker": "SPEAKER_03",
+      "duration": 6.867864,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00528",
+      "start": 4258.063728,
+      "end": 4258.453536,
+      "speaker": "SPEAKER_38",
+      "duration": 0.389808,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00529",
+      "start": 4261.502696,
+      "end": 4263.092144,
+      "speaker": "SPEAKER_38",
+      "duration": 1.589448,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00530",
+      "start": 4264.301856,
+      "end": 4268.37056,
+      "speaker": "SPEAKER_38",
+      "duration": 4.068704,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00531",
+      "start": 4264.62176,
+      "end": 4264.851616,
+      "speaker": "SPEAKER_03",
+      "duration": 0.229856,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00532",
+      "start": 4268.940464,
+      "end": 4273.089144,
+      "speaker": "SPEAKER_03",
+      "duration": 4.14868,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00533",
+      "start": 4270.380032,
+      "end": 4270.689864,
+      "speaker": "SPEAKER_38",
+      "duration": 0.309832,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00534",
+      "start": 4279.9771519999995,
+      "end": 4306.599088,
+      "speaker": "SPEAKER_38",
+      "duration": 26.621936,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00535",
+      "start": 4308.288656,
+      "end": 4317.795728,
+      "speaker": "SPEAKER_38",
+      "duration": 9.507072,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00536",
+      "start": 4319.00544,
+      "end": 4322.35436,
+      "speaker": "SPEAKER_38",
+      "duration": 3.34892,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00537",
+      "start": 4324.844000000001,
+      "end": 4328.354000000001,
+      "speaker": "SPEAKER_39",
+      "duration": 3.51,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00538",
+      "start": 4326.684000000001,
+      "end": 4327.074000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 0.39,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00539",
+      "start": 4329.644000000001,
+      "end": 4334.994000000001,
+      "speaker": "SPEAKER_39",
+      "duration": 5.35,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00540",
+      "start": 4331.804000000001,
+      "end": 4332.114000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 0.31,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00541",
+      "start": 4335.244000000001,
+      "end": 4337.714000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 2.47,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00542",
+      "start": 4336.764000000001,
+      "end": 4342.434000000001,
+      "speaker": "SPEAKER_39",
+      "duration": 5.67,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00543",
+      "start": 4339.724000000001,
+      "end": 4340.034000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 0.31,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00544",
+      "start": 4344.444000000001,
+      "end": 4348.754000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 4.31,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00545",
+      "start": 4349.804000000001,
+      "end": 4351.314000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 1.51,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00546",
+      "start": 4352.604000000001,
+      "end": 4371.394000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 18.79,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00547",
+      "start": 4368.124000000001,
+      "end": 4368.354000000001,
+      "speaker": "SPEAKER_39",
+      "duration": 0.23,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00548",
+      "start": 4372.204000000001,
+      "end": 4374.434000000001,
+      "speaker": "SPEAKER_39",
+      "duration": 2.23,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00549",
+      "start": 4374.444000000001,
+      "end": 4376.914000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 2.47,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00550",
+      "start": 4378.124000000001,
+      "end": 4398.354000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 20.23,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00551",
+      "start": 4395.964000000001,
+      "end": 4398.114000000001,
+      "speaker": "SPEAKER_39",
+      "duration": 2.15,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00552",
+      "start": 4399.644000000001,
+      "end": 4417.634000000001,
+      "speaker": "SPEAKER_39",
+      "duration": 17.99,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00553",
+      "start": 4419.564000000001,
+      "end": 4422.754000000001,
+      "speaker": "SPEAKER_39",
+      "duration": 3.19,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00554",
+      "start": 4423.804000000001,
+      "end": 4424.594000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 0.79,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00555",
+      "start": 4425.804000000001,
+      "end": 4431.394000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 5.59,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00556",
+      "start": 4432.684000000001,
+      "end": 4454.434000000001,
+      "speaker": "SPEAKER_03",
+      "duration": 21.75,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00557",
+      "start": 4449.644000000001,
+      "end": 4450.114000000001,
+      "speaker": "SPEAKER_39",
+      "duration": 0.47,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00558",
+      "start": 4452.044000000001,
+      "end": 4452.274000000001,
+      "speaker": "SPEAKER_39",
+      "duration": 0.23,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00559",
+      "start": 4456.4424875,
+      "end": 4479.991512500001,
+      "speaker": "SPEAKER_40",
+      "duration": 23.549025,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    },
+    {
+      "index": "00560",
+      "start": 4457.560562500001,
+      "end": 4457.7897375,
+      "speaker": "SPEAKER_41",
+      "duration": 0.229175,
+      "is_short_backchannel": true,
+      "train_quality_label": "short_backchannel_review",
+      "needs_manual_review": true
+    },
+    {
+      "index": "00561",
+      "start": 4481.0401375,
+      "end": 4493.168825000001,
+      "speaker": "SPEAKER_41",
+      "duration": 12.128688,
+      "is_short_backchannel": false,
+      "train_quality_label": "clean_candidate",
+      "needs_manual_review": false
+    }
+  ],
+  "metadata": {
+    "stage": "diarize",
+    "device": "cuda",
+    "processing_time_seconds": 151.4293360710144,
+    "postprocessing": {
+      "same_speaker_merge_gap_seconds": 0.3,
+      "short_backchannel_seconds": 1.0,
+      "input_segment_count": 562,
+      "output_segment_count": 562,
+      "merged_same_speaker_gap_count": 0,
+      "short_backchannel_count": 114
+    },
+    "reclustering": {
+      "skipped": false,
+      "input_speakers": 42,
+      "output_speakers": 42,
+      "merges": {},
+      "similarity_threshold": 0.75,
+      "speaker_durations_before": {
+        "SPEAKER_03": 1973.4,
+        "SPEAKER_25": 152.11,
+        "SPEAKER_04": 142.21,
+        "SPEAKER_32": 141.43,
+        "SPEAKER_33": 131.54,
+        "SPEAKER_27": 119.37,
+        "SPEAKER_10": 100.05,
+        "SPEAKER_01": 97.45,
+        "SPEAKER_22": 96.09,
+        "SPEAKER_38": 90.32,
+        "SPEAKER_19": 90.0,
+        "SPEAKER_00": 85.73,
+        "SPEAKER_17": 76.35,
+        "SPEAKER_23": 66.12,
+        "SPEAKER_09": 62.71,
+        "SPEAKER_21": 60.45,
+        "SPEAKER_37": 60.15,
+        "SPEAKER_11": 55.28,
+        "SPEAKER_34": 53.84,
+        "SPEAKER_14": 53.75,
+        "SPEAKER_13": 53.49,
+        "SPEAKER_05": 50.13,
+        "SPEAKER_08": 49.43,
+        "SPEAKER_20": 45.47,
+        "SPEAKER_39": 41.02,
+        "SPEAKER_29": 35.35,
+        "SPEAKER_31": 33.91,
+        "SPEAKER_36": 28.47,
+        "SPEAKER_07": 26.27,
+        "SPEAKER_02": 25.3,
+        "SPEAKER_12": 24.06,
+        "SPEAKER_40": 23.55,
+        "SPEAKER_35": 23.05,
+        "SPEAKER_24": 21.18,
+        "SPEAKER_06": 17.59,
+        "SPEAKER_28": 15.8,
+        "SPEAKER_16": 14.62,
+        "SPEAKER_26": 13.32,
+        "SPEAKER_41": 12.36,
+        "SPEAKER_30": 8.85,
+        "SPEAKER_18": 5.49,
+        "SPEAKER_15": 5.0
+      }
+    }
+  }
+}

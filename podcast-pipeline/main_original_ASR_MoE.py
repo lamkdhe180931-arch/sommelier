@@ -2505,8 +2505,11 @@ def _compute_chunk_speaker_centroids(chunk_df: pd.DataFrame, audio_info, embedde
 
     centroids = {}
     for speaker, rows in chunk_df.groupby("speaker"):
+        rows = rows.copy()
+        rows["_dur"] = rows["end"] - rows["start"]
+        
         embeddings = []
-        for _, row in rows.sort_values("start").iterrows():
+        for _, row in rows.sort_values("_dur", ascending=False).iterrows():
             emb = _extract_speaker_embedding(
                 audio_info, row["start"], row["end"], embedder=embedder
             )
