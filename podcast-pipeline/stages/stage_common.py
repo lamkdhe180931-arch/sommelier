@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -243,6 +244,28 @@ def _merge_segment_pair(left: dict[str, Any], right: dict[str, Any]) -> dict[str
             source_indices.append(str(segment["index"]))
     if source_indices:
         merged["source_indices"] = source_indices
+
+    source_trace_ids: list[str] = []
+    for segment in (left, right):
+        trace = segment.get("stage1_trace")
+        if not isinstance(trace, dict):
+            continue
+        postprocess = trace.get("postprocess")
+        if isinstance(postprocess, dict) and isinstance(postprocess.get("source_trace_ids"), list):
+            source_trace_ids.extend(str(item) for item in postprocess["source_trace_ids"])
+        elif trace.get("trace_id") is not None:
+            source_trace_ids.append(str(trace["trace_id"]))
+
+    if source_trace_ids:
+        merged_trace = copy.deepcopy(left.get("stage1_trace")) if isinstance(left.get("stage1_trace"), dict) else {}
+        merged_trace["postprocess"] = {
+            "action": "merged_same_speaker_gap",
+            "source_trace_ids": source_trace_ids,
+            "merged_segment_count": len(source_trace_ids),
+            "merged_start": round(float(merged["start"]), 6),
+            "merged_end": round(float(merged["end"]), 6),
+        }
+        merged["stage1_trace"] = merged_trace
     return merged
 
 
@@ -318,6 +341,17 @@ def postprocess_diarization_segments(
         else:
             segment.setdefault("train_quality_label", "clean_candidate")
             segment.setdefault("needs_manual_review", False)
+
+        if isinstance(segment.get("stage1_trace"), dict):
+            trace = copy.deepcopy(segment["stage1_trace"])
+            postprocess_trace = trace.get("postprocess")
+            if not isinstance(postprocess_trace, dict):
+                postprocess_trace = {"action": "kept"}
+            postprocess_trace["is_short_backchannel"] = bool(is_real_backchannel)
+            postprocess_trace["train_quality_label"] = segment.get("train_quality_label")
+            postprocess_trace["needs_manual_review"] = bool(segment.get("needs_manual_review"))
+            trace["postprocess"] = postprocess_trace
+            segment["stage1_trace"] = trace
 
     return merged_segments, {
         "same_speaker_merge_gap_seconds": same_speaker_merge_gap,

@@ -70,8 +70,8 @@ class StageCommonTests(unittest.TestCase):
         import stage_common
 
         segments = [
-            {"index": "00000", "start": 0.0, "end": 1.0, "speaker": "SPEAKER_00"},
-            {"index": "00001", "start": 1.2, "end": 2.0, "speaker": "SPEAKER_00"},
+            {"index": "00000", "start": 0.0, "end": 1.0, "speaker": "SPEAKER_00", "stage1_trace": {"trace_id": "trace-left"}},
+            {"index": "00001", "start": 1.2, "end": 2.0, "speaker": "SPEAKER_00", "stage1_trace": {"trace_id": "trace-right"}},
             {"index": "00002", "start": 2.1, "end": 2.45, "speaker": "SPEAKER_01"},
             {"index": "00003", "start": 2.55, "end": 3.0, "speaker": "SPEAKER_00"},
         ]
@@ -87,6 +87,11 @@ class StageCommonTests(unittest.TestCase):
         self.assertEqual(postprocessed[0]["start"], 0.0)
         self.assertEqual(postprocessed[0]["end"], 2.0)
         self.assertFalse(postprocessed[0]["is_short_backchannel"])
+        self.assertEqual(
+            postprocessed[0]["stage1_trace"]["postprocess"]["source_trace_ids"],
+            ["trace-left", "trace-right"],
+        )
+        self.assertEqual(postprocessed[0]["stage1_trace"]["postprocess"]["action"], "merged_same_speaker_gap")
         self.assertTrue(postprocessed[1]["is_short_backchannel"])
         self.assertEqual(postprocessed[1]["train_quality_label"], "short_backchannel_review")
         self.assertEqual(postprocessed[2]["speaker"], "SPEAKER_00")

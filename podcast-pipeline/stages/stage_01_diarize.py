@@ -5,6 +5,8 @@ import shutil
 import time
 import json
 import datetime
+import copy
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 import pandas as pd
@@ -213,6 +215,38 @@ def df_to_list(df: pd.DataFrame) -> list[dict]:
         records.append(record)
     return records
 
+
+def _as_trace_dict(value) -> dict:
+    if isinstance(value, dict):
+        return copy.deepcopy(value)
+    return {}
+
+
+def _segment_duration_seconds(start, end) -> float:
+    try:
+        return max(0.0, float(end) - float(start))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _round_similarity(value):
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if numeric < 0:
+        return None
+    return round(numeric, 6)
+
+
+def _similarity_gap(best_similarity, second_best_similarity):
+    best = _round_similarity(best_similarity)
+    second = _round_similarity(second_best_similarity)
+    if best is None or second is None:
+        return None
+    return round(best - second, 6)
+
+
 def split_long_segments(segment_list, max_duration=30.0):
     """
     Cắt các segment dài hơn max_duration theo thời gian, không dùng VAD.
@@ -233,31 +267,44 @@ def split_long_segments(segment_list, max_duration=30.0):
     for segment in segment_list:
         start_time = segment['start']
         end_time = segment['end']
-        speaker = segment['speaker']
         duration = end_time - start_time
 
         # Segment đủ ngắn thì giữ nguyên và chỉ đánh lại index.
         if duration <= max_duration:
-            segment['index'] = str(new_index).zfill(5)
-            new_segments.append(segment)
+            copied_segment = copy.deepcopy(segment)
+            copied_segment['index'] = str(new_index).zfill(5)
+            new_segments.append(copied_segment)
             new_index += 1
         # Segment quá dài thì cắt thành nhiều chunk nối tiếp nhau.
         else:
+            split_ranges = []
             current_start = start_time
-            # Lặp tới khi phủ hết khoảng thời gian gốc.
             while current_start < end_time:
                 # Điểm kết thúc chunk tiếp theo không được vượt end gốc.
                 chunk_end = min(current_start + max_duration, end_time)
-                
-                new_segments.append({
-                    'index': str(new_index).zfill(5),
-                    'start': round(current_start, 3),
-                    'end': round(chunk_end, 3),
-                    'speaker': speaker
-                })
-                new_index += 1
+                split_ranges.append((current_start, chunk_end))
                 # Chunk kế tiếp bắt đầu ngay tại end của chunk hiện tại.
                 current_start = chunk_end
+
+            split_part_count = len(split_ranges)
+            split_from_index = str(segment.get("index", ""))
+            for split_part, (current_start, chunk_end) in enumerate(split_ranges):
+                split_segment = copy.deepcopy(segment)
+                split_segment['index'] = str(new_index).zfill(5)
+                split_segment['start'] = round(current_start, 3)
+                split_segment['end'] = round(chunk_end, 3)
+                trace = _as_trace_dict(split_segment.get("stage1_trace"))
+                trace["split"] = {
+                    "split_from_index": split_from_index,
+                    "split_part": split_part,
+                    "split_part_count": split_part_count,
+                    "original_start": round(float(start_time), 6),
+                    "original_end": round(float(end_time), 6),
+                    "max_duration": round(float(max_duration), 6),
+                }
+                split_segment["stage1_trace"] = trace
+                new_segments.append(split_segment)
+                new_index += 1
                 
     return new_segments
 
@@ -596,6 +643,7 @@ def align_speakers_across_chunks(
         )
         mapping: dict[str, str] = {}
         decision_by_local: dict[str, dict] = {}
+        decision_trace_by_local: dict[str, dict] = {}
         # Theo dõi global speaker đã dùng trong chunk để hai local speaker khác
         # nhau không bị map vào cùng một global ID.
         used_global_ids_in_chunk: set[str] = set()
@@ -677,26 +725,35 @@ def align_speakers_across_chunks(
                         global_counts[mapped_speaker] = count + 1
                     centroid_updated = True
 
-            decisions.append(
-                {
-                    "local_speaker": local_speaker,
-                    "mapped_speaker": mapped_speaker,
-                    "action": decision["action"],
-                    "reason": decision["reason"],
-                    "embedding_available": emb is not None,
-                    "has_clean_identity_evidence": has_clean_identity_evidence,
-                    "best_global_speaker": best_id,
-                    "best_similarity": round(best_sim, 6),
-                    "second_best_global_speaker": second_best_id,
-                    "second_best_similarity": round(second_best_sim, 6),
-                    "identity_low_confidence": decision["identity_low_confidence"],
-                    "centroid_updated": centroid_updated,
-                    "candidates": candidates[:10],
-                }
-            )
+            decision_record = {
+                "local_speaker": local_speaker,
+                "mapped_speaker": mapped_speaker,
+                "action": decision["action"],
+                "reason": decision["reason"],
+                "embedding_available": emb is not None,
+                "has_clean_identity_evidence": has_clean_identity_evidence,
+                "best_global_speaker": best_id,
+                "best_similarity": _round_similarity(best_sim),
+                "second_best_global_speaker": second_best_id,
+                "second_best_similarity": _round_similarity(second_best_sim),
+                "similarity_margin": _similarity_gap(best_sim, second_best_sim),
+                "identity_low_confidence": decision["identity_low_confidence"],
+                "centroid_updated": centroid_updated,
+                "candidates": candidates[:10],
+                "thresholds": {
+                    "similarity_threshold": similarity_threshold,
+                    "similarity_margin": similarity_margin,
+                    "weak_match_threshold": weak_match_threshold,
+                    "centroid_update_threshold": centroid_update_threshold,
+                    "identity_min_duration_seconds": identity_min_duration,
+                },
+            }
+            decision_trace_by_local[local_speaker] = decision_record
+            decisions.append(decision_record)
 
         remapped_df = df.copy()
         remapped_df["_speaker_link_local"] = remapped_df["speaker"]
+        remapped_df["pre_link_speaker"] = remapped_df["speaker"]
         remapped_df["speaker_identity_clean_candidate"] = clean_mask.reindex(remapped_df.index, fill_value=False).astype(bool)
         remapped_df["speaker"] = remapped_df["speaker"].map(mapping)
         for local_speaker, decision in decision_by_local.items():
@@ -713,6 +770,56 @@ def align_speakers_across_chunks(
                 remapped_df.loc[mask, "speaker_identity_status"] = "weak_context_match"
             else:
                 remapped_df.loc[mask, "speaker_identity_status"] = "clean"
+
+        traces = []
+        trace_ids = []
+        for local_segment_index, (_row_index, row) in enumerate(remapped_df.iterrows()):
+            local_speaker = str(row.get("_speaker_link_local", ""))
+            decision_record = decision_trace_by_local.get(local_speaker, {})
+            trace_id = f"chunk{chunk_idx:03d}:local:{local_speaker}:row{local_segment_index:05d}"
+            trace_ids.append(trace_id)
+            source_start = float(row.get("start", 0.0))
+            source_end = float(row.get("end", source_start))
+            traces.append(
+                {
+                    "trace_id": trace_id,
+                    "chunk": {
+                        "chunk_index": chunk_idx,
+                        "chunk_offset": row.get("_stage1_chunk_offset"),
+                        "chunk_duration": row.get("_stage1_chunk_duration"),
+                        "local_segment_index": local_segment_index,
+                        "local_speaker": local_speaker,
+                        "source_start": round(source_start, 6),
+                        "source_end": round(source_end, 6),
+                        "duration": round(_segment_duration_seconds(source_start, source_end), 6),
+                    },
+                    "identity": {
+                        "clean_candidate": bool(row.get("speaker_identity_clean_candidate", False)),
+                        "has_clean_identity_evidence": bool(
+                            decision_record.get("has_clean_identity_evidence", False)
+                        ),
+                        "embedding_available": bool(decision_record.get("embedding_available", False)),
+                        "identity_low_confidence": bool(row.get("identity_low_confidence", False)),
+                        "status": row.get("speaker_identity_status"),
+                    },
+                    "link": {
+                        "pre_link_speaker": local_speaker,
+                        "mapped_speaker": row.get("speaker"),
+                        "action": row.get("speaker_link_action"),
+                        "reason": row.get("speaker_link_reason"),
+                        "best_candidate": decision_record.get("best_global_speaker"),
+                        "best_similarity": decision_record.get("best_similarity"),
+                        "second_candidate": decision_record.get("second_best_global_speaker"),
+                        "second_similarity": decision_record.get("second_best_similarity"),
+                        "similarity_margin": decision_record.get("similarity_margin"),
+                        "centroid_updated": bool(decision_record.get("centroid_updated", False)),
+                        "thresholds": decision_record.get("thresholds", {}),
+                        "top_candidates": copy.deepcopy(decision_record.get("candidates", [])[:5]),
+                    },
+                }
+            )
+        remapped_df["stage1_trace_id"] = trace_ids
+        remapped_df["stage1_trace"] = traces
         aligned_frames.append(remapped_df)
         chunk_stats.append(
             {
@@ -734,6 +841,150 @@ def align_speakers_across_chunks(
         "chunks": chunk_stats,
     }
     return (aligned_frames, stats) if return_stats else aligned_frames
+
+
+def _apply_recluster_trace(
+    speakerdia: pd.DataFrame,
+    *,
+    mapping: dict[str, str],
+    decisions: dict[str, dict],
+) -> pd.DataFrame:
+    result = speakerdia.copy()
+    if result.empty or "speaker" not in result.columns:
+        return result
+
+    original_speakers = result["speaker"].astype(str)
+    result["pre_recluster_speaker"] = original_speakers
+    result["speaker"] = original_speakers.map(mapping).fillna(original_speakers)
+
+    traces = []
+    actions = []
+    reasons = []
+    best_candidates = []
+    best_similarities = []
+
+    for _, row in result.iterrows():
+        source_speaker = str(row.get("pre_recluster_speaker", ""))
+        final_speaker = str(row.get("speaker", source_speaker))
+        decision = decisions.get(source_speaker, {})
+        top_candidates = copy.deepcopy(decision.get("top_candidates", []))
+        best_candidate = decision.get("best_recluster_candidate")
+        best_similarity = _round_similarity(decision.get("best_recluster_similarity", -1.0))
+        action = str(decision.get("action", "kept"))
+        reason = str(decision.get("reason", "not_evaluated"))
+
+        trace = _as_trace_dict(row.get("stage1_trace"))
+        trace["recluster"] = {
+            "pre_recluster_speaker": source_speaker,
+            "final_speaker": final_speaker,
+            "action": action,
+            "reason": reason,
+            "best_candidate": best_candidate,
+            "best_similarity": best_similarity,
+            "similarity_threshold": decision.get("similarity_threshold"),
+            "top_candidates": top_candidates,
+        }
+        traces.append(trace)
+        actions.append(action)
+        reasons.append(reason)
+        best_candidates.append(best_candidate)
+        best_similarities.append(best_similarity)
+
+    result["stage1_trace"] = traces
+    result["recluster_action"] = actions
+    result["recluster_reason"] = reasons
+    result["recluster_best_candidate"] = best_candidates
+    result["recluster_best_similarity"] = best_similarities
+    return result
+
+
+def _build_speaker_diagnostics(
+    segments: list[dict],
+    *,
+    speaker_linking_stats: dict,
+    recluster_stats: dict,
+) -> dict:
+    speaker_counts = Counter()
+    speaker_durations = Counter()
+    speaker_link_actions = Counter()
+    speaker_link_reasons = Counter()
+    speaker_identity_statuses = Counter()
+    recluster_actions = Counter()
+    recluster_reasons = Counter()
+
+    low_confidence_segments = 0
+    manual_review_segments = 0
+    short_backchannel_segments = 0
+    clean_identity_candidate_segments = 0
+    missing_speaker_link_action_segments = 0
+    split_segments = 0
+
+    for segment in segments:
+        speaker = str(segment.get("speaker", "")).strip() or "UNKNOWN"
+        duration = _segment_duration_seconds(segment.get("start", 0.0), segment.get("end", 0.0))
+        speaker_counts[speaker] += 1
+        speaker_durations[speaker] += duration
+
+        action = segment.get("speaker_link_action")
+        if action is None:
+            missing_speaker_link_action_segments += 1
+        else:
+            speaker_link_actions[str(action)] += 1
+
+        reason = segment.get("speaker_link_reason")
+        if reason is not None:
+            speaker_link_reasons[str(reason)] += 1
+
+        status = segment.get("speaker_identity_status")
+        if status is not None:
+            speaker_identity_statuses[str(status)] += 1
+
+        trace = segment.get("stage1_trace")
+        if isinstance(trace, dict):
+            if isinstance(trace.get("split"), dict):
+                split_segments += 1
+            recluster = trace.get("recluster")
+            if isinstance(recluster, dict):
+                if recluster.get("action") is not None:
+                    recluster_actions[str(recluster["action"])] += 1
+                if recluster.get("reason") is not None:
+                    recluster_reasons[str(recluster["reason"])] += 1
+
+        if bool(segment.get("identity_low_confidence")):
+            low_confidence_segments += 1
+        if bool(segment.get("needs_manual_review")):
+            manual_review_segments += 1
+        if bool(segment.get("is_short_backchannel")):
+            short_backchannel_segments += 1
+        if bool(segment.get("speaker_identity_clean_candidate")):
+            clean_identity_candidate_segments += 1
+
+    bottleneck_summary = {
+        "segments_total": len(segments),
+        "speakers_final": dict(sorted(speaker_counts.items())),
+        "speaker_duration_seconds": {
+            speaker: round(duration, 6)
+            for speaker, duration in sorted(speaker_durations.items(), key=lambda item: (-item[1], item[0]))
+        },
+        "speaker_link_actions": dict(sorted(speaker_link_actions.items())),
+        "speaker_link_reasons": dict(sorted(speaker_link_reasons.items())),
+        "speaker_identity_statuses": dict(sorted(speaker_identity_statuses.items())),
+        "recluster_actions": dict(sorted(recluster_actions.items())),
+        "recluster_reasons": dict(sorted(recluster_reasons.items())),
+        "low_confidence_segments": low_confidence_segments,
+        "manual_review_segments": manual_review_segments,
+        "short_backchannel_segments": short_backchannel_segments,
+        "clean_identity_candidate_segments": clean_identity_candidate_segments,
+        "missing_speaker_link_action_segments": missing_speaker_link_action_segments,
+        "split_segments": split_segments,
+    }
+
+    return {
+        "schema_version": 1,
+        "bottleneck_summary": bottleneck_summary,
+        "speaker_linking": speaker_linking_stats,
+        "reclustering": recluster_stats,
+    }
 
 
 def re_cluster_speakers(
@@ -777,9 +1028,11 @@ def re_cluster_speakers(
 
     # 2. Extract representative embedding per speaker (centroid of longest segments)
     speaker_embeddings = {}
+    embedding_sources = {}
     for sp, _ in ranked:
         mask = speakerdia["speaker"] == sp
         rows = speakerdia[mask].copy()
+        candidate_segment_count_before_filter = len(rows)
         rows = rows[rows["speaker"] != review_speaker_label]
         if "identity_low_confidence" in rows.columns:
             rows = rows[rows["identity_low_confidence"] != True]
@@ -788,6 +1041,12 @@ def re_cluster_speakers(
         else:
             rows = rows[(rows["end"] - rows["start"]) >= identity_min_duration]
         if rows.empty:
+            embedding_sources[sp] = {
+                "candidate_segment_count_before_filter": candidate_segment_count_before_filter,
+                "clean_segment_count": 0,
+                "embedding_segment_count": 0,
+                "reason": "no_clean_segments",
+            }
             continue
         rows = rows.assign(_dur=rows["end"] - rows["start"])
         rows = rows.sort_values("_dur", ascending=False)
@@ -803,6 +1062,19 @@ def re_cluster_speakers(
                 break
         if embs:
             speaker_embeddings[sp] = np.mean(embs, axis=0)
+            embedding_sources[sp] = {
+                "candidate_segment_count_before_filter": candidate_segment_count_before_filter,
+                "clean_segment_count": len(rows),
+                "embedding_segment_count": len(embs),
+                "reason": "embedding_created",
+            }
+        else:
+            embedding_sources[sp] = {
+                "candidate_segment_count_before_filter": candidate_segment_count_before_filter,
+                "clean_segment_count": len(rows),
+                "embedding_segment_count": 0,
+                "reason": "embedding_extraction_failed",
+            }
 
     # 3. Greedy clustering: process speakers by descending duration
     #    The first (longest) speaker always creates a new cluster.
@@ -810,20 +1082,24 @@ def re_cluster_speakers(
     #    is high enough, or create a new one.
     clusters = {}
     speaker_to_cluster = {}
+    recluster_decisions = {}
 
     for sp, dur in ranked:
         emb = speaker_embeddings.get(sp)
 
         best_cid = None
         best_sim = -1.0
+        candidates = []
         if emb is not None:
             for cid, cl in clusters.items():
                 if cl["embedding"] is None:
                     continue
                 sim = _cosine_similarity(emb, cl["embedding"])
+                candidates.append({"speaker": cid, "similarity": round(sim, 6)})
                 if sim > best_sim:
                     best_sim = sim
                     best_cid = cid
+        candidates.sort(key=lambda item: item["similarity"], reverse=True)
 
         if best_sim >= similarity_threshold and best_cid is not None:
             # Merge into existing cluster — update centroid with duration-weighted average
@@ -835,6 +1111,18 @@ def re_cluster_speakers(
             cl["duration"] = new_d
             cl["members"].append(sp)
             speaker_to_cluster[sp] = best_cid
+            recluster_decisions[sp] = {
+                "speaker": sp,
+                "mapped_speaker": best_cid,
+                "action": "merged",
+                "reason": "above_threshold",
+                "duration": round(float(dur), 6),
+                "best_recluster_candidate": best_cid,
+                "best_recluster_similarity": _round_similarity(best_sim),
+                "similarity_threshold": similarity_threshold,
+                "top_candidates": candidates[:10],
+                "embedding_source": embedding_sources.get(sp, {}),
+            }
         else:
             # Create new cluster with this speaker as representative
             clusters[sp] = {
@@ -843,15 +1131,36 @@ def re_cluster_speakers(
                 "members": [sp],
             }
             speaker_to_cluster[sp] = sp
+            if sp == review_speaker_label:
+                keep_reason = "review_speaker"
+            elif emb is None:
+                keep_reason = "no_clean_embedding"
+            elif best_cid is None:
+                keep_reason = "cluster_representative"
+            else:
+                keep_reason = "below_threshold"
+            recluster_decisions[sp] = {
+                "speaker": sp,
+                "mapped_speaker": sp,
+                "action": "kept",
+                "reason": keep_reason,
+                "duration": round(float(dur), 6),
+                "best_recluster_candidate": best_cid,
+                "best_recluster_similarity": _round_similarity(best_sim),
+                "similarity_threshold": similarity_threshold,
+                "top_candidates": candidates[:10],
+                "embedding_source": embedding_sources.get(sp, {}),
+            }
 
     # 4. Build mapping and apply
     mapping = {sp: cid for sp, cid in speaker_to_cluster.items()}
     merges = {}
+    active_logger = globals().get("logger") or Logger.get_logger()
     for cid, cl in clusters.items():
         if len(cl["members"]) > 1:
             merged_from = [m for m in cl["members"] if m != cid]
             merges[cid] = merged_from
-            logger.info(
+            active_logger.info(
                 f"Speaker re-cluster: {', '.join(merged_from)} -> {cid} "
                 f"(total {cl['duration']:.1f}s)"
             )
@@ -863,14 +1172,13 @@ def re_cluster_speakers(
         "merges": {k: v for k, v in merges.items()},
         "similarity_threshold": similarity_threshold,
         "speaker_durations_before": {sp: round(d, 2) for sp, d in ranked},
+        "speaker_embeddings": embedding_sources,
+        "decisions": recluster_decisions,
+        "mapping": mapping,
     }
 
-    if merges:
-        result = speakerdia.copy()
-        result["speaker"] = result["speaker"].map(mapping)
-        return result, stats
-
-    return speakerdia, stats
+    result = _apply_recluster_trace(speakerdia, mapping=mapping, decisions=recluster_decisions)
+    return result, stats
 
 
 def prepare_diarization_chunks(
@@ -1098,6 +1406,8 @@ def main() -> None:
             if not chunk_df.empty:
                 chunk_df["start"] += chunk["offset"]
                 chunk_df["end"] += chunk["offset"]
+                chunk_df["_stage1_chunk_offset"] = float(chunk["offset"])
+                chunk_df["_stage1_chunk_duration"] = float(chunk["duration"])
                 chunk_df = _apply_sortformer_segment_padding_from_args(chunk_df, pipe_args, logger, audio_duration)
             diarization_frames.append(chunk_df)
     finally:
@@ -1138,6 +1448,13 @@ def main() -> None:
     segments, postproc_stats = stage_common.postprocess_diarization_segments(
         segments, same_speaker_merge_gap=args.same_speaker_merge_gap, short_backchannel_seconds=args.short_backchannel_seconds, max_segment_duration=args.max_segment_duration
     )
+    segments_for_json = stage_common.clean_segments_for_json(segments)
+    speaker_diagnostics = _build_speaker_diagnostics(
+        segments_for_json,
+        speaker_linking_stats=speaker_linking_stats,
+        recluster_stats=recluster_stats,
+    )
+    speaker_diag_out_path = Path(out_path).parent / "speaker_diagnostics.json"
     
     elapsed = time.time() - start_time
     logger.info(f"Diarization finished in {elapsed:.2f}s.")
@@ -1149,7 +1466,7 @@ def main() -> None:
         "audio_name": audio_info["name"],
         "sample_rate": audio_info["sample_rate"],
         "audio_duration_seconds": audio_duration,
-        "segments": stage_common.clean_segments_for_json(segments),
+        "segments": segments_for_json,
         "metadata": {
             "stage": "diarize",
             "device": device_name,
@@ -1157,11 +1474,14 @@ def main() -> None:
             "postprocessing": postproc_stats,
             "reclustering": recluster_stats,
             "speaker_linking": speaker_linking_stats,
+            "speaker_diagnostics_path": str(speaker_diag_out_path),
         },
     }
     
     stage_common.dump_json(out_data, out_path)
     logger.info(f"Saved diarization to {out_path}")
+    stage_common.dump_json(speaker_diagnostics, speaker_diag_out_path)
+    logger.info(f"Saved speaker diagnostics to {speaker_diag_out_path}")
     
     # Save VAD chunks to a separate vad_chunks.json file in the same directory
     vad_out_path = Path(out_path).parent / "vad_chunks.json"
