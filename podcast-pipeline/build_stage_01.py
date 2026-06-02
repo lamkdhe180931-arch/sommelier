@@ -47,6 +47,7 @@ except ImportError:
             return logging.getLogger("stage_01")
             
 from models.silero_vad import SileroVAD
+import models.silero_vad as silero_vad
 
 warnings.filterwarnings("ignore")
 """
