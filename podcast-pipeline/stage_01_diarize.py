@@ -88,7 +88,7 @@ def main() -> None:
             speaker_embedder = pipeline.Inference(
                 "pyannote/embedding",
                 device=device,
-                use_auth_token=cfg["huggingface_token"],
+                token=cfg["huggingface_token"],
                 window="whole",
             )
         except Exception as exc:

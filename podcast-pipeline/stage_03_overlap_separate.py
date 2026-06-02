@@ -70,7 +70,7 @@ def main() -> None:
 
             embedding_model = PyannoteModel.from_pretrained(
                 "pyannote/embedding",
-                use_auth_token=cfg.get("huggingface_token"),
+                token=cfg.get("huggingface_token"),
             ).to(device)
             separator = pipeline.SepReformerSeparator(
                 sepreformer_path=str(sepreformer_path),
