@@ -66,11 +66,11 @@ content += silence_int + "\n"
 content += get(2358, 2419) + "\n"
 content += get(2422, 2483) + "\n"
 content += get(2486, 2493) + "\n"
-content += get(2496, 2519) + "\n"
-content += get(2522, 2592) + "\n"
-content += get(2595, 2718) + "\n"
+content += get(2496, 2521) + "\n"
+content += get(2524, 2594) + "\n"
+content += get(2597, 2720) + "\n"
 
-prep = get(2721, 2797)
+prep = get(2723, 2799)
 content += prep + "\n"
 
 wrapper = """
@@ -81,21 +81,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config_path", default="config.json")
     parser.add_argument("--seg_th", type=float, default=0.11)
     parser.add_argument("--min_cluster_size", type=int, default=11)
-    parser.add_argument("--clust_th", type=float, default=0.5)
-    parser.add_argument("--merge_gap", type=float, default=2.0)
-    parser.add_argument("--same_speaker_merge_gap", type=float, default=0.3)
+    parser.add_argument("--same_speaker_merge_gap", type=float, default=1.0)
     parser.add_argument("--short_backchannel_seconds", type=float, default=1.0)
-    parser.add_argument("--speaker-link-threshold", type=float, default=0.6)
     parser.add_argument("--max_segment_duration", type=float, default=30.0)
-    parser.add_argument("--speaker-recluster-threshold", type=float, default=0.75)
+    
+    # Sortformer params
     parser.add_argument("--sortformer-param", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--sortformer-pad-offset", type=float, default=0.01)
-    parser.add_argument("--sortformer-pad-onset", type=float, default=0.23)
+    parser.add_argument("--sortformer-pad-onset", type=float, default=0.0)
+    parser.add_argument("--sortformer-pad-offset", type=float, default=0.0)
     parser.add_argument("--onset", type=float, default=0.53)
     parser.add_argument("--offset", type=float, default=0.49)
     parser.add_argument("--min-duration-on", type=float, default=0.42)
     parser.add_argument("--min-duration-off", type=float, default=0.34)
     parser.add_argument("--use-custom-binarize", action=argparse.BooleanOptionalAction, default=True)
+    
+    # Re-cluster
+    parser.add_argument("--speaker-link-threshold", type=float, default=0.75)
+    parser.add_argument("--speaker-recluster-threshold", type=float, default=0.7)
+    
     return parser.parse_args()
 
 def main() -> None:

@@ -454,8 +454,8 @@ def _compute_chunk_speaker_centroids(chunk_df: pd.DataFrame, audio_info, embedde
                 embeddings.append(emb)
             if len(embeddings) >= 3:
                 break
-
-    return centroids
+        if embeddings:
+            centroids[speaker] = np.mean(embeddings, axis=0)
 
 
 def align_speakers_across_chunks(
@@ -526,8 +526,8 @@ def align_speakers_across_chunks(
 
         remapped_df = df.copy()
         remapped_df["speaker"] = remapped_df["speaker"].map(mapping)
+        aligned_frames.append(remapped_df)
 
-    return aligned_frames
 
 
 def re_cluster_speakers(
@@ -651,8 +651,8 @@ def re_cluster_speakers(
     if merges:
         result = speakerdia.copy()
         result["speaker"] = result["speaker"].map(mapping)
+        return result, stats
 
-    return speakerdia, stats
 
 
 def prepare_diarization_chunks(
@@ -729,6 +729,8 @@ def prepare_diarization_chunks(
 
     logger.info(
         f"Pre-diarization chunking created {len(chunk_entries)} chunks "
+        f"(max {max_duration}s) from {os.path.basename(audio_path)}"
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -738,21 +740,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config_path", default="config.json")
     parser.add_argument("--seg_th", type=float, default=0.11)
     parser.add_argument("--min_cluster_size", type=int, default=11)
-    parser.add_argument("--clust_th", type=float, default=0.5)
-    parser.add_argument("--merge_gap", type=float, default=2.0)
-    parser.add_argument("--same_speaker_merge_gap", type=float, default=0.3)
+    parser.add_argument("--same_speaker_merge_gap", type=float, default=1.0)
     parser.add_argument("--short_backchannel_seconds", type=float, default=1.0)
-    parser.add_argument("--speaker-link-threshold", type=float, default=0.6)
     parser.add_argument("--max_segment_duration", type=float, default=30.0)
-    parser.add_argument("--speaker-recluster-threshold", type=float, default=0.75)
+    
+    # Sortformer params
     parser.add_argument("--sortformer-param", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--sortformer-pad-offset", type=float, default=0.01)
-    parser.add_argument("--sortformer-pad-onset", type=float, default=0.23)
+    parser.add_argument("--sortformer-pad-onset", type=float, default=0.0)
+    parser.add_argument("--sortformer-pad-offset", type=float, default=0.0)
     parser.add_argument("--onset", type=float, default=0.53)
     parser.add_argument("--offset", type=float, default=0.49)
     parser.add_argument("--min-duration-on", type=float, default=0.42)
     parser.add_argument("--min-duration-off", type=float, default=0.34)
     parser.add_argument("--use-custom-binarize", action=argparse.BooleanOptionalAction, default=True)
+    
+    # Re-cluster
+    parser.add_argument("--speaker-link-threshold", type=float, default=0.75)
+    parser.add_argument("--speaker-recluster-threshold", type=float, default=0.7)
+    
     return parser.parse_args()
 
 def main() -> None:
