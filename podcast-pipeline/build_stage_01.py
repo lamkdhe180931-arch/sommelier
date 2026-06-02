@@ -239,12 +239,13 @@ def main() -> None:
     elapsed = time.time() - start_time
     logger.info(f"Diarization finished in {elapsed:.2f}s.")
 
+    vad_chunks = [{"offset": c["offset"], "duration": c["duration"]} for c in diar_chunks]
+    
     out_data = {
         "audio_path": str(audio_path),
         "audio_name": audio_info["name"],
         "sample_rate": audio_info["sample_rate"],
         "audio_duration_seconds": audio_duration,
-        "vad_chunks": [{"offset": c["offset"], "duration": c["duration"]} for c in diar_chunks],
         "segments": stage_common.clean_segments_for_json(segments),
         "metadata": {
             "stage": "diarize",
@@ -257,6 +258,11 @@ def main() -> None:
     
     stage_common.dump_json(out_data, out_path)
     logger.info(f"Saved diarization to {out_path}")
+    
+    # Save VAD chunks to a separate vad_chunks.json file in the same directory
+    vad_out_path = Path(out_path).parent / "vad_chunks.json"
+    stage_common.dump_json({"vad_chunks": vad_chunks}, vad_out_path)
+    logger.info(f"Saved VAD chunks to {vad_out_path}")
 
 if __name__ == "__main__":
     main()

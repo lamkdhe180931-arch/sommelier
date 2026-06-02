@@ -442,7 +442,6 @@ def _compute_chunk_speaker_centroids(chunk_df: pd.DataFrame, audio_info, embedde
 
     centroids = {}
     for speaker, rows in chunk_df.groupby("speaker"):
-        # Tính độ dài của từng segment để ưu tiên lấy các đoạn dài nhất
         rows = rows.copy()
         rows["_dur"] = rows["end"] - rows["start"]
         
@@ -455,9 +454,9 @@ def _compute_chunk_speaker_centroids(chunk_df: pd.DataFrame, audio_info, embedde
                 embeddings.append(emb)
             if len(embeddings) >= 3:
                 break
-        if embeddings:
-            centroids[speaker] = np.mean(embeddings, axis=0)
+
     return centroids
+
 
 def align_speakers_across_chunks(
     chunk_frames: list[pd.DataFrame],
@@ -527,9 +526,9 @@ def align_speakers_across_chunks(
 
         remapped_df = df.copy()
         remapped_df["speaker"] = remapped_df["speaker"].map(mapping)
-        aligned_frames.append(remapped_df)
 
     return aligned_frames
+
 
 def re_cluster_speakers(
     speakerdia,
@@ -652,9 +651,9 @@ def re_cluster_speakers(
     if merges:
         result = speakerdia.copy()
         result["speaker"] = result["speaker"].map(mapping)
-        return result, stats
 
     return speakerdia, stats
+
 
 def prepare_diarization_chunks(
     audio_path,
@@ -730,9 +729,6 @@ def prepare_diarization_chunks(
 
     logger.info(
         f"Pre-diarization chunking created {len(chunk_entries)} chunks "
-        f"(max {max_duration}s) from {os.path.basename(audio_path)}"
-    )
-    return chunk_entries, temp_dir
 
 
 def parse_args() -> argparse.Namespace:
@@ -900,12 +896,13 @@ def main() -> None:
     elapsed = time.time() - start_time
     logger.info(f"Diarization finished in {elapsed:.2f}s.")
 
+    vad_chunks = [{"offset": c["offset"], "duration": c["duration"]} for c in diar_chunks]
+    
     out_data = {
         "audio_path": str(audio_path),
         "audio_name": audio_info["name"],
         "sample_rate": audio_info["sample_rate"],
         "audio_duration_seconds": audio_duration,
-        "vad_chunks": [{"offset": c["offset"], "duration": c["duration"]} for c in diar_chunks],
         "segments": stage_common.clean_segments_for_json(segments),
         "metadata": {
             "stage": "diarize",
@@ -918,6 +915,11 @@ def main() -> None:
     
     stage_common.dump_json(out_data, out_path)
     logger.info(f"Saved diarization to {out_path}")
+    
+    # Save VAD chunks to a separate vad_chunks.json file in the same directory
+    vad_out_path = Path(out_path).parent / "vad_chunks.json"
+    stage_common.dump_json({"vad_chunks": vad_chunks}, vad_out_path)
+    logger.info(f"Saved VAD chunks to {vad_out_path}")
 
 if __name__ == "__main__":
     main()
