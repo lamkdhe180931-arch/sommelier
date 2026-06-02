@@ -456,6 +456,7 @@ def _compute_chunk_speaker_centroids(chunk_df: pd.DataFrame, audio_info, embedde
                 break
         if embeddings:
             centroids[speaker] = np.mean(embeddings, axis=0)
+    return centroids
 
 
 def align_speakers_across_chunks(
