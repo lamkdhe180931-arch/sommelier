@@ -754,6 +754,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 def main() -> None:
+    global logger, cfg, pipe_args, vad, device, device_name
     args = parse_args()
     audio_path = Path(args.input_audio).expanduser().resolve()
     out_path = Path(args.out) if args.out else stage_common.default_stage_dir(audio_path) / "diarization.json"
@@ -805,7 +806,7 @@ def main() -> None:
     audio_duration = len(audio_info["waveform"]) / audio_info["sample_rate"]
 
     start_time = time.time()
-    diar_chunks, temp_chunk_dir = prepare_diarization_chunks(str(audio_path), audio_info, vad)
+    diar_chunks, temp_chunk_dir = prepare_diarization_chunks(str(audio_path), audio_info)
     diarization_frames = []
 
     try:

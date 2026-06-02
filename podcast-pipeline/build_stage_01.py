@@ -58,10 +58,7 @@ content += get(2181, 2221) + "\n"
 content += get(2223, 2240) + "\n"
 content += get(2260, 2306) + "\n"
 
-# Patch silence_intervals to accept vad
 silence_int = get(2309, 2355)
-silence_int = silence_int.replace("def _build_silence_intervals(audio_info):", "def _build_silence_intervals(audio_info, vad):")
-silence_int = silence_int.replace("pipeline.vad.", "vad.")
 content += silence_int + "\n"
 
 content += get(2358, 2419) + "\n"
@@ -71,10 +68,7 @@ content += get(2496, 2519) + "\n"
 content += get(2522, 2592) + "\n"
 content += get(2595, 2718) + "\n"
 
-# Patch prepare chunks to accept vad
 prep = get(2721, 2797)
-prep = prep.replace("def prepare_diarization_chunks(audio_path: str, audio_info):", "def prepare_diarization_chunks(audio_path: str, audio_info, vad):")
-prep = prep.replace("_build_silence_intervals(audio_info)", "_build_silence_intervals(audio_info, vad)")
 content += prep + "\n"
 
 wrapper = """
@@ -103,6 +97,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 def main() -> None:
+    global logger, cfg, pipe_args, vad, device, device_name
     args = parse_args()
     audio_path = Path(args.input_audio).expanduser().resolve()
     out_path = Path(args.out) if args.out else stage_common.default_stage_dir(audio_path) / "diarization.json"
@@ -154,7 +149,7 @@ def main() -> None:
     audio_duration = len(audio_info["waveform"]) / audio_info["sample_rate"]
 
     start_time = time.time()
-    diar_chunks, temp_chunk_dir = prepare_diarization_chunks(str(audio_path), audio_info, vad)
+    diar_chunks, temp_chunk_dir = prepare_diarization_chunks(str(audio_path), audio_info)
     diarization_frames = []
 
     try:
