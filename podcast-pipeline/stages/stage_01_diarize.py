@@ -188,15 +188,29 @@ def df_to_list(df: pd.DataFrame) -> list[dict]:
       - index: chuỗi 5 chữ số.
       - start/end: giây trên timeline file gốc.
       - speaker: speaker label.
+      - các metadata public khác như identity_low_confidence nếu có.
     """
     records = []
     for i, row in df.iterrows():
-        records.append({
+        record = {
             'index': f"{i:05d}",
             'start': float(row['start']),
             'end': float(row['end']),
             'speaker': row['speaker']
-        })
+        }
+        for column in df.columns:
+            if column in {"segment", "label", "start", "end", "speaker"}:
+                continue
+            if str(column).startswith("_"):
+                continue
+            value = row[column]
+            try:
+                if pd.isna(value):
+                    continue
+            except (TypeError, ValueError):
+                pass
+            record[column] = value
+        records.append(record)
     return records
 
 def split_long_segments(segment_list, max_duration=30.0):
@@ -430,6 +444,100 @@ def _cosine_similarity(vec_a, vec_b):
         return -1.0
     return float(np.dot(vec_a, vec_b) / denom)
 
+def _chunk_clean_identity_mask(chunk_df: pd.DataFrame, min_identity_duration: float) -> pd.Series:
+    """
+    Mark rows that are safe to use for speaker identity learning.
+
+    A row must be long enough and must not overlap a different local speaker in
+    the same chunk. Short/overlap rows can still be kept in the transcript, but
+    they are not trusted as identity evidence.
+    """
+    if chunk_df is None or chunk_df.empty:
+        return pd.Series(dtype=bool)
+
+    clean_flags = []
+    for _, row in chunk_df.iterrows():
+        start = float(row["start"])
+        end = float(row["end"])
+        speaker = row["speaker"]
+        duration = max(0.0, end - start)
+
+        overlaps_other = False
+        for _, other in chunk_df.iterrows():
+            if other["speaker"] == speaker:
+                continue
+            overlap = min(end, float(other["end"])) - max(start, float(other["start"]))
+            if overlap > 0:
+                overlaps_other = True
+                break
+
+        clean_flags.append(duration >= min_identity_duration and not overlaps_other)
+
+    return pd.Series(clean_flags, index=chunk_df.index)
+
+
+def _collect_speaker_embeddings(
+    rows: pd.DataFrame,
+    audio_info,
+    embedder: Inference | None,
+    *,
+    max_embeddings: int = 3,
+):
+    embeddings = []
+    if rows is None or rows.empty:
+        return embeddings
+
+    rows = rows.copy()
+    rows["_dur"] = rows["end"] - rows["start"]
+    for _, row in rows.sort_values("_dur", ascending=False).iterrows():
+        emb = _extract_speaker_embedding(
+            audio_info, row["start"], row["end"], embedder=embedder
+        )
+        if emb is not None:
+            embeddings.append(emb)
+        if len(embeddings) >= max_embeddings:
+            break
+    return embeddings
+
+
+def _compute_chunk_speaker_identity_profiles(
+    chunk_df: pd.DataFrame,
+    audio_info,
+    embedder: Inference | None,
+    identity_min_duration: float = 2.0,
+):
+    """
+    Build per-local-speaker profiles for global speaker linking.
+
+    `embedding` may come from weak rows so a short backchannel can still match a
+    clear existing speaker. `has_clean_identity_evidence` is only true when the
+    embedding came from long non-overlap rows, allowing centroid create/update.
+    """
+    if embedder is None or chunk_df is None or chunk_df.empty:
+        return {}, pd.Series(dtype=bool)
+
+    clean_mask = _chunk_clean_identity_mask(chunk_df, identity_min_duration)
+    profiles = {}
+
+    for speaker, rows in chunk_df.groupby("speaker"):
+        clean_rows = rows.loc[clean_mask.reindex(rows.index, fill_value=False)]
+        clean_embeddings = _collect_speaker_embeddings(clean_rows, audio_info, embedder)
+        if clean_embeddings:
+            profiles[speaker] = {
+                "embedding": np.mean(clean_embeddings, axis=0),
+                "has_clean_identity_evidence": True,
+            }
+            continue
+
+        weak_embeddings = _collect_speaker_embeddings(rows, audio_info, embedder)
+        profiles[speaker] = {
+            "embedding": np.mean(weak_embeddings, axis=0) if weak_embeddings else None,
+            "has_clean_identity_evidence": False,
+        }
+
+    return profiles, clean_mask
+
+
 def _compute_chunk_speaker_centroids(chunk_df: pd.DataFrame, audio_info, embedder: Inference | None):
     """
     Tạo centroid embedding cho từng speaker trong một chunk diarization.
@@ -437,26 +545,12 @@ def _compute_chunk_speaker_centroids(chunk_df: pd.DataFrame, audio_info, embedde
     Mỗi speaker lấy tối đa vài segment đầu đủ điều kiện, rồi trung bình embedding
     để tạo đại diện speaker trong chunk đó.
     """
-    if embedder is None or chunk_df is None or chunk_df.empty:
-        return {}
-
-    centroids = {}
-    for speaker, rows in chunk_df.groupby("speaker"):
-        rows = rows.copy()
-        rows["_dur"] = rows["end"] - rows["start"]
-        
-        embeddings = []
-        for _, row in rows.sort_values("_dur", ascending=False).iterrows():
-            emb = _extract_speaker_embedding(
-                audio_info, row["start"], row["end"], embedder=embedder
-            )
-            if emb is not None:
-                embeddings.append(emb)
-            if len(embeddings) >= 3:
-                break
-        if embeddings:
-            centroids[speaker] = np.mean(embeddings, axis=0)
-    return centroids
+    profiles, _ = _compute_chunk_speaker_identity_profiles(chunk_df, audio_info, embedder)
+    return {
+        speaker: profile["embedding"]
+        for speaker, profile in profiles.items()
+        if profile.get("embedding") is not None
+    }
 
 
 def align_speakers_across_chunks(
@@ -464,6 +558,12 @@ def align_speakers_across_chunks(
     audio_info,
     embedder: Inference | None,
     similarity_threshold: float = 0.75,
+    similarity_margin: float = 0.08,
+    weak_match_threshold: float = 0.55,
+    centroid_update_threshold: float = 0.85,
+    identity_min_duration: float = 2.0,
+    review_speaker_label: str = "SPEAKER_REVIEW",
+    return_stats: bool = False,
 ):
     """
     Nối speaker label cục bộ giữa các chunk thành speaker label toàn file.
@@ -474,29 +574,51 @@ def align_speakers_across_chunks(
     """
     if embedder is None or not chunk_frames:
         logger.warning("Speaker embedder unavailable; skipping cross-chunk speaker linking.")
-        return chunk_frames
+        stats = {
+            "skipped": True,
+            "reason": "no_embedder_or_chunks",
+        }
+        return (chunk_frames, stats) if return_stats else chunk_frames
 
     global_centroids: dict[str, np.ndarray | None] = {}
     global_counts: dict[str, int] = {}
     next_global_idx = 0
     aligned_frames: list[pd.DataFrame] = []
+    chunk_stats = []
 
     for chunk_idx, df in enumerate(chunk_frames):
         if df is None or df.empty:
             aligned_frames.append(df)
             continue
 
-        local_centroids = _compute_chunk_speaker_centroids(df, audio_info, embedder)
+        profiles, clean_mask = _compute_chunk_speaker_identity_profiles(
+            df, audio_info, embedder, identity_min_duration=identity_min_duration
+        )
         mapping: dict[str, str] = {}
+        decision_by_local: dict[str, dict] = {}
         # Theo dõi global speaker đã dùng trong chunk để hai local speaker khác
         # nhau không bị map vào cùng một global ID.
         used_global_ids_in_chunk: set[str] = set()
+        decisions = []
 
-        for local_speaker in df["speaker"].unique():
-            emb = local_centroids.get(local_speaker)
+        local_speakers = list(df["speaker"].unique())
+        local_speakers.sort(
+            key=lambda sp: (
+                not bool(profiles.get(sp, {}).get("has_clean_identity_evidence", False)),
+                str(sp),
+            )
+        )
+
+        for local_speaker in local_speakers:
+            profile = profiles.get(local_speaker, {})
+            emb = profile.get("embedding")
+            has_clean_identity_evidence = bool(profile.get("has_clean_identity_evidence", False))
 
             best_id = None
             best_sim = -1.0
+            second_best_id = None
+            second_best_sim = -1.0
+            candidates = []
             if emb is not None:
                 for gid, centroid in global_centroids.items():
                     if centroid is None:
@@ -505,31 +627,113 @@ def align_speakers_across_chunks(
                     if gid in used_global_ids_in_chunk:
                         continue
                     sim = _cosine_similarity(emb, centroid)
+                    candidates.append({"speaker": gid, "similarity": round(sim, 6)})
                     if sim > best_sim:
+                        second_best_id = best_id
+                        second_best_sim = best_sim
                         best_sim = sim
                         best_id = gid
+                    elif sim > second_best_sim:
+                        second_best_id = gid
+                        second_best_sim = sim
+            candidates.sort(key=lambda item: item["similarity"], reverse=True)
 
-            if best_sim >= similarity_threshold and best_id is not None:
-                mapping[local_speaker] = best_id
-                used_global_ids_in_chunk.add(best_id)
-                count = global_counts.get(best_id, 0)
-                global_centroids[best_id] = (global_centroids[best_id] * count + emb) / (
-                    count + 1
-                )
-                global_counts[best_id] = count + 1
-            else:
-                global_id = f"SPEAKER_{next_global_idx:02d}"
+            next_global_id = f"SPEAKER_{next_global_idx:02d}"
+            decision = stage_common.resolve_speaker_identity_decision(
+                best_id=best_id,
+                best_similarity=best_sim,
+                second_best_similarity=second_best_sim,
+                has_clean_identity_evidence=has_clean_identity_evidence,
+                next_global_id=next_global_id,
+                similarity_threshold=similarity_threshold,
+                similarity_margin=similarity_margin,
+                weak_match_threshold=weak_match_threshold,
+                centroid_update_threshold=centroid_update_threshold,
+                review_speaker_label=review_speaker_label,
+            )
+
+            mapped_speaker = decision["mapped_speaker"]
+            mapping[local_speaker] = mapped_speaker
+            decision_by_local[local_speaker] = decision
+
+            centroid_updated = False
+            if decision["should_create_new"]:
                 next_global_idx += 1
-                mapping[local_speaker] = global_id
-                used_global_ids_in_chunk.add(global_id)
-                global_centroids[global_id] = emb
-                global_counts[global_id] = 1 if emb is not None else 0
+                used_global_ids_in_chunk.add(mapped_speaker)
+                global_centroids[mapped_speaker] = emb
+                global_counts[mapped_speaker] = 1 if emb is not None else 0
+                centroid_updated = emb is not None
+            elif mapped_speaker != review_speaker_label:
+                used_global_ids_in_chunk.add(mapped_speaker)
+                if decision["should_update_centroid"] and emb is not None:
+                    count = global_counts.get(mapped_speaker, 0)
+                    if global_centroids.get(mapped_speaker) is None or count <= 0:
+                        global_centroids[mapped_speaker] = emb
+                        global_counts[mapped_speaker] = 1
+                    else:
+                        global_centroids[mapped_speaker] = (
+                            global_centroids[mapped_speaker] * count + emb
+                        ) / (count + 1)
+                        global_counts[mapped_speaker] = count + 1
+                    centroid_updated = True
+
+            decisions.append(
+                {
+                    "local_speaker": local_speaker,
+                    "mapped_speaker": mapped_speaker,
+                    "action": decision["action"],
+                    "reason": decision["reason"],
+                    "embedding_available": emb is not None,
+                    "has_clean_identity_evidence": has_clean_identity_evidence,
+                    "best_global_speaker": best_id,
+                    "best_similarity": round(best_sim, 6),
+                    "second_best_global_speaker": second_best_id,
+                    "second_best_similarity": round(second_best_sim, 6),
+                    "identity_low_confidence": decision["identity_low_confidence"],
+                    "centroid_updated": centroid_updated,
+                    "candidates": candidates[:10],
+                }
+            )
 
         remapped_df = df.copy()
+        remapped_df["_speaker_link_local"] = remapped_df["speaker"]
+        remapped_df["speaker_identity_clean_candidate"] = clean_mask.reindex(remapped_df.index, fill_value=False).astype(bool)
         remapped_df["speaker"] = remapped_df["speaker"].map(mapping)
+        for local_speaker, decision in decision_by_local.items():
+            mask = remapped_df["_speaker_link_local"] == local_speaker
+            remapped_df.loc[mask, "speaker_link_action"] = decision["action"]
+            remapped_df.loc[mask, "speaker_link_reason"] = decision["reason"]
+            remapped_df.loc[mask, "identity_low_confidence"] = bool(decision["identity_low_confidence"])
+            if decision["identity_low_confidence"]:
+                remapped_df.loc[mask, "needs_manual_review"] = True
+                remapped_df.loc[mask, "train_quality_label"] = "speaker_identity_review"
+            if decision["mapped_speaker"] == review_speaker_label:
+                remapped_df.loc[mask, "speaker_identity_status"] = "review"
+            elif decision["identity_low_confidence"]:
+                remapped_df.loc[mask, "speaker_identity_status"] = "weak_context_match"
+            else:
+                remapped_df.loc[mask, "speaker_identity_status"] = "clean"
         aligned_frames.append(remapped_df)
+        chunk_stats.append(
+            {
+                "chunk_index": chunk_idx,
+                "local_speaker_count": len(local_speakers),
+                "decisions": decisions,
+            }
+        )
 
-    return aligned_frames
+    stats = {
+        "skipped": False,
+        "similarity_threshold": similarity_threshold,
+        "similarity_margin": similarity_margin,
+        "weak_match_threshold": weak_match_threshold,
+        "centroid_update_threshold": centroid_update_threshold,
+        "identity_min_duration_seconds": identity_min_duration,
+        "review_speaker_label": review_speaker_label,
+        "global_speaker_count": next_global_idx,
+        "chunks": chunk_stats,
+    }
+    return (aligned_frames, stats) if return_stats else aligned_frames
 
 
 def re_cluster_speakers(
@@ -537,6 +741,8 @@ def re_cluster_speakers(
     audio_info,
     embedder,
     similarity_threshold=0.75,
+    identity_min_duration=2.0,
+    review_speaker_label="SPEAKER_REVIEW",
 ):
     """
     Re-cluster fragmented speaker IDs after cross-chunk alignment.
@@ -574,6 +780,15 @@ def re_cluster_speakers(
     for sp, _ in ranked:
         mask = speakerdia["speaker"] == sp
         rows = speakerdia[mask].copy()
+        rows = rows[rows["speaker"] != review_speaker_label]
+        if "identity_low_confidence" in rows.columns:
+            rows = rows[rows["identity_low_confidence"] != True]
+        if "speaker_identity_clean_candidate" in rows.columns:
+            rows = rows[rows["speaker_identity_clean_candidate"] == True]
+        else:
+            rows = rows[(rows["end"] - rows["start"]) >= identity_min_duration]
+        if rows.empty:
+            continue
         rows = rows.assign(_dur=rows["end"] - rows["start"])
         rows = rows.sort_values("_dur", ascending=False)
 
@@ -762,6 +977,11 @@ def parse_args() -> argparse.Namespace:
     
     # Re-cluster
     parser.add_argument("--speaker-link-threshold", type=float, default=0.75)
+    parser.add_argument("--speaker-link-margin", type=float, default=0.08)
+    parser.add_argument("--speaker-weak-match-threshold", type=float, default=0.55)
+    parser.add_argument("--speaker-centroid-update-threshold", type=float, default=0.85)
+    parser.add_argument("--speaker-identity-min-duration", type=float, default=2.0)
+    parser.add_argument("--speaker-review-label", default="SPEAKER_REVIEW")
     parser.add_argument("--speaker-recluster-threshold", type=float, default=0.7)
     
     return parser.parse_args()
@@ -884,9 +1104,19 @@ def main() -> None:
         if temp_chunk_dir:
             shutil.rmtree(temp_chunk_dir, ignore_errors=True)
 
+    speaker_linking_stats = {"skipped": True, "reason": "no_diarization_frames"}
     if diarization_frames:
-        diarization_frames = align_speakers_across_chunks(
-            diarization_frames, audio_info=audio_info, embedder=speaker_embedder, similarity_threshold=args.speaker_link_threshold
+        diarization_frames, speaker_linking_stats = align_speakers_across_chunks(
+            diarization_frames,
+            audio_info=audio_info,
+            embedder=speaker_embedder,
+            similarity_threshold=args.speaker_link_threshold,
+            similarity_margin=args.speaker_link_margin,
+            weak_match_threshold=args.speaker_weak_match_threshold,
+            centroid_update_threshold=args.speaker_centroid_update_threshold,
+            identity_min_duration=args.speaker_identity_min_duration,
+            review_speaker_label=args.speaker_review_label,
+            return_stats=True,
         )
         speakerdia = pd.concat(diarization_frames, ignore_index=True)
     else:
@@ -895,7 +1125,12 @@ def main() -> None:
     recluster_stats = {"skipped": True, "reason": "disabled_or_no_embedder"}
     if args.speaker_recluster_threshold > 0 and speaker_embedder is not None:
         speakerdia, recluster_stats = re_cluster_speakers(
-            speakerdia, audio_info=audio_info, embedder=speaker_embedder, similarity_threshold=args.speaker_recluster_threshold
+            speakerdia,
+            audio_info=audio_info,
+            embedder=speaker_embedder,
+            similarity_threshold=args.speaker_recluster_threshold,
+            identity_min_duration=args.speaker_identity_min_duration,
+            review_speaker_label=args.speaker_review_label,
         )
 
     segments = df_to_list(speakerdia)
@@ -921,6 +1156,7 @@ def main() -> None:
             "processing_time_seconds": elapsed,
             "postprocessing": postproc_stats,
             "reclustering": recluster_stats,
+            "speaker_linking": speaker_linking_stats,
         },
     }
     

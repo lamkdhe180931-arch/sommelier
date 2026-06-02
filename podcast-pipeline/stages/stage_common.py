@@ -73,6 +73,78 @@ def segment_duration(segment: dict[str, Any]) -> float:
         return 0.0
 
 
+def _similarity_margin(best_similarity: float, second_best_similarity: float) -> float:
+    if second_best_similarity < 0:
+        return float("inf")
+    return best_similarity - second_best_similarity
+
+
+def resolve_speaker_identity_decision(
+    *,
+    best_id: str | None,
+    best_similarity: float,
+    second_best_similarity: float,
+    has_clean_identity_evidence: bool,
+    next_global_id: str,
+    similarity_threshold: float,
+    similarity_margin: float,
+    weak_match_threshold: float,
+    centroid_update_threshold: float = 0.85,
+    review_speaker_label: str = "SPEAKER_REVIEW",
+) -> dict[str, Any]:
+    """
+    Decide how a local speaker track should map into global speaker identity.
+
+    Clean identity evidence means the local track has enough non-overlap speech to
+    trust its embedding. Weak tracks can match a clearly similar existing speaker,
+    but they must not create or update global centroids.
+    """
+    margin = _similarity_margin(best_similarity, second_best_similarity)
+    has_clear_best = best_id is not None and margin >= similarity_margin
+
+    if has_clear_best and best_similarity >= similarity_threshold:
+        return {
+            "mapped_speaker": best_id,
+            "action": "matched_existing",
+            "reason": "matched",
+            "should_create_new": False,
+            "should_update_centroid": bool(
+                has_clean_identity_evidence and best_similarity >= centroid_update_threshold
+            ),
+            "identity_low_confidence": not has_clean_identity_evidence,
+        }
+
+    if has_clean_identity_evidence:
+        reason = "margin_too_small" if best_id is not None and best_similarity >= similarity_threshold else "below_threshold"
+        return {
+            "mapped_speaker": next_global_id,
+            "action": "created_new",
+            "reason": reason,
+            "should_create_new": True,
+            "should_update_centroid": True,
+            "identity_low_confidence": False,
+        }
+
+    if has_clear_best and best_similarity >= weak_match_threshold:
+        return {
+            "mapped_speaker": best_id,
+            "action": "matched_weak_context",
+            "reason": "weak_context_match",
+            "should_create_new": False,
+            "should_update_centroid": False,
+            "identity_low_confidence": True,
+        }
+
+    return {
+        "mapped_speaker": review_speaker_label,
+        "action": "review_weak_identity",
+        "reason": "weak_identity_review",
+        "should_create_new": False,
+        "should_update_centroid": False,
+        "identity_low_confidence": True,
+    }
+
+
 DUPLEX_GROUP_CLEAN = "clean_duplex_2speaker"
 DUPLEX_GROUP_REVIEW = "overlap_review"
 DUPLEX_GROUP_EXCLUDE = "exclude_or_extra_speaker"

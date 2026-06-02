@@ -93,6 +93,86 @@ class StageCommonTests(unittest.TestCase):
         self.assertEqual(stats["merged_same_speaker_gap_count"], 1)
         self.assertEqual(stats["short_backchannel_count"], 2)
 
+    def test_speaker_identity_policy_reviews_weak_unmatched_segment(self):
+        import stage_common
+
+        decision = stage_common.resolve_speaker_identity_decision(
+            best_id="SPEAKER_00",
+            best_similarity=0.29,
+            second_best_similarity=0.18,
+            has_clean_identity_evidence=False,
+            next_global_id="SPEAKER_05",
+            similarity_threshold=0.75,
+            similarity_margin=0.08,
+            weak_match_threshold=0.55,
+            review_speaker_label="SPEAKER_REVIEW",
+        )
+
+        self.assertEqual(decision["mapped_speaker"], "SPEAKER_REVIEW")
+        self.assertEqual(decision["action"], "review_weak_identity")
+        self.assertFalse(decision["should_create_new"])
+        self.assertFalse(decision["should_update_centroid"])
+        self.assertTrue(decision["identity_low_confidence"])
+
+    def test_speaker_identity_policy_maps_clear_weak_segment_without_update(self):
+        import stage_common
+
+        decision = stage_common.resolve_speaker_identity_decision(
+            best_id="SPEAKER_01",
+            best_similarity=0.62,
+            second_best_similarity=0.40,
+            has_clean_identity_evidence=False,
+            next_global_id="SPEAKER_05",
+            similarity_threshold=0.75,
+            similarity_margin=0.08,
+            weak_match_threshold=0.55,
+            review_speaker_label="SPEAKER_REVIEW",
+        )
+
+        self.assertEqual(decision["mapped_speaker"], "SPEAKER_01")
+        self.assertEqual(decision["action"], "matched_weak_context")
+        self.assertFalse(decision["should_create_new"])
+        self.assertFalse(decision["should_update_centroid"])
+        self.assertTrue(decision["identity_low_confidence"])
+
+    def test_speaker_identity_policy_allows_clean_new_and_clean_update(self):
+        import stage_common
+
+        new_decision = stage_common.resolve_speaker_identity_decision(
+            best_id="SPEAKER_00",
+            best_similarity=0.30,
+            second_best_similarity=0.10,
+            has_clean_identity_evidence=True,
+            next_global_id="SPEAKER_05",
+            similarity_threshold=0.75,
+            similarity_margin=0.08,
+            weak_match_threshold=0.55,
+            review_speaker_label="SPEAKER_REVIEW",
+        )
+        update_decision = stage_common.resolve_speaker_identity_decision(
+            best_id="SPEAKER_00",
+            best_similarity=0.90,
+            second_best_similarity=0.20,
+            has_clean_identity_evidence=True,
+            next_global_id="SPEAKER_05",
+            similarity_threshold=0.75,
+            similarity_margin=0.08,
+            weak_match_threshold=0.55,
+            centroid_update_threshold=0.85,
+            review_speaker_label="SPEAKER_REVIEW",
+        )
+
+        self.assertEqual(new_decision["mapped_speaker"], "SPEAKER_05")
+        self.assertEqual(new_decision["action"], "created_new")
+        self.assertTrue(new_decision["should_create_new"])
+        self.assertTrue(new_decision["should_update_centroid"])
+        self.assertFalse(new_decision["identity_low_confidence"])
+        self.assertEqual(update_decision["mapped_speaker"], "SPEAKER_00")
+        self.assertEqual(update_decision["action"], "matched_existing")
+        self.assertFalse(update_decision["should_create_new"])
+        self.assertTrue(update_decision["should_update_centroid"])
+        self.assertFalse(update_decision["identity_low_confidence"])
+
     def test_assign_duplex_train_groups_selects_two_main_speakers(self):
         import stage_common
 
