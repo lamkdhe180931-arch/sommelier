@@ -871,7 +871,7 @@ def main() -> None:
             speaker_embedder = Inference(
                 "pyannote/embedding",
                 device=device,
-                use_auth_token=cfg["huggingface_token"],
+                token=cfg["huggingface_token"],
                 window="whole",
             )
         except Exception as exc:
@@ -897,12 +897,54 @@ def main() -> None:
 
     try:
         for chunk in diar_chunks:
-            predicted_segments, _ = diar_model.diarize(
+            predicted_segments, tensor_outputs = diar_model.diarize(
                 audio=chunk["path"],
                 batch_size=1,
                 include_tensor_outputs=True,
             )
-            chunk_df = sortformer_dia(predicted_segments)
+            chunk_df = None
+            if getattr(args, "use_custom_binarize", False) and tensor_outputs is not None:
+                probs = None
+                if isinstance(tensor_outputs, torch.Tensor):
+                    probs = tensor_outputs.squeeze(0).cpu().numpy()
+                elif isinstance(tensor_outputs, list) and len(tensor_outputs) > 0 and isinstance(tensor_outputs[0], torch.Tensor):
+                    probs = tensor_outputs[0].squeeze(0).cpu().numpy()
+                elif isinstance(tensor_outputs, dict) and "preds" in tensor_outputs:
+                    probs = tensor_outputs["preds"].squeeze(0).cpu().numpy()
+                if probs is not None:
+                    if probs.min() < 0 or probs.max() > 1.0:
+                        probs = 1.0 / (1.0 + np.exp(-probs))
+                    try:
+                        chunk_duration = float(librosa.get_duration(path=chunk["path"]))
+                        frame_shift = chunk_duration / probs.shape[0]
+                        onset = float(getattr(args, "onset", 0.53))
+                        offset = float(getattr(args, "offset", 0.49))
+                        min_duration_on = float(getattr(args, "min_duration_on", 0.42))
+                        min_duration_off = float(getattr(args, "min_duration_off", 0.34))
+                        if getattr(args, "_logged_custom_binarize", None) != True:
+                            logger.info(f"Applying custom binarize with params -> onset: {onset}, offset: {offset}, min_on: {min_duration_on}, min_off: {min_duration_off}")
+                            setattr(args, "_logged_custom_binarize", True)
+                        custom_segments = custom_binarize(probs, frame_shift, onset, offset, min_duration_on, min_duration_off)
+                        chunk_df = pd.DataFrame(custom_segments)
+                        if not chunk_df.empty:
+                            chunk_df = chunk_df.sort_values(by="start").reset_index(drop=True)
+                            chunk_df["label"] = [chr(ord('A') + i) for i in range(len(chunk_df))]
+                            def fmt(sec):
+                                import datetime
+                                td = datetime.timedelta(seconds=sec)
+                                hrs = td.seconds // 3600 + td.days * 24
+                                mins = (td.seconds // 60) % 60
+                                secs = td.seconds % 60
+                                ms = int(td.microseconds / 1000)
+                                return f"{hrs:02d}:{mins:02d}:{secs:02d}.{ms:03d}"
+                            chunk_df["segment"] = chunk_df.apply(lambda row: f"[ {fmt(row['start'])} --> {fmt(row['end'])}]", axis=1)
+                        else:
+                            chunk_df = pd.DataFrame(columns=['segment','label','speaker','start','end'])
+                    except Exception as e:
+                        logger.warning(f"Custom binarize failed: {e}. Fallback to default sortformer_dia.")
+                        chunk_df = None
+            if chunk_df is None:
+                chunk_df = sortformer_dia(predicted_segments)
             if not chunk_df.empty:
                 chunk_df["start"] += chunk["offset"]
                 chunk_df["end"] += chunk["offset"]

@@ -543,7 +543,7 @@ def main() -> None:
             try:
                 if Inference is None:
                     raise ImportError("pyannote.audio is not installed")
-                speaker_embedder = Inference("pyannote/embedding", device=device, use_auth_token=cfg["huggingface_token"], window="whole")
+                speaker_embedder = Inference("pyannote/embedding", device=device, token=cfg["huggingface_token"], window="whole")
             except Exception as exc:
                 logger.warning(f"Speaker embedder unavailable: {exc}")
                 
