@@ -21,6 +21,8 @@ def create_nb(filename, title, install_cmd, run_cmd, zip_input, zip_output, eval
                 "import os\n",
                 "if not os.path.exists('/kaggle/working/sommelier'):\n",
                 "    !git clone -b test-divide-stage https://github.com/lamkdhe180931-arch/sommelier.git\n",
+                "else:\n",
+                "    !cd /kaggle/working/sommelier && git pull origin test-divide-stage\n",
                 "%cd /kaggle/working/sommelier/podcast-pipeline/stages"
             ]
         },

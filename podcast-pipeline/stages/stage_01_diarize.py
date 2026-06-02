@@ -868,10 +868,11 @@ def main() -> None:
     if cfg.get("huggingface_token", "").startswith("hf"):
         try:
             from pyannote.audio import Inference
+            from pyannote.audio import Model as PyannoteModel
+            emb_model = PyannoteModel.from_pretrained("pyannote/embedding", use_auth_token=cfg["huggingface_token"])
             speaker_embedder = Inference(
-                "pyannote/embedding",
+                emb_model,
                 device=device,
-                token=cfg["huggingface_token"],
                 window="whole",
             )
         except Exception as exc:

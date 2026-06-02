@@ -3719,10 +3719,11 @@ if __name__ == "__main__":
     # Speaker embedder dùng để nối speaker label giữa các chunk diarization.
     speaker_embedder = None
     try:
+        from pyannote.audio import Model as PyannoteModel
+        emb_model = PyannoteModel.from_pretrained("pyannote/embedding", use_auth_token=cfg["huggingface_token"])
         speaker_embedder = Inference(
-            "pyannote/embedding",
+            emb_model,
             device=device,
-            token=cfg["huggingface_token"],
             window="whole",
         )
         logger.debug(" * Speaker embedding model loaded for cross-chunk linking")
