@@ -4,7 +4,7 @@ import os
 out_dir = "stages/notebooks"
 os.makedirs(out_dir, exist_ok=True)
 
-def create_nb(filename, title, install_cmd, run_cmd, zip_input, zip_output, eval_cmd=None):
+def create_nb(filename, title, install_cmd, run_cmd, zip_input, zip_output, eval_cmd=None, extra_cells=None):
     cells = [
         {
             "cell_type": "markdown",
@@ -74,6 +74,16 @@ def create_nb(filename, title, install_cmd, run_cmd, zip_input, zip_output, eval
             "outputs": [],
             "source": eval_cmd
         })
+        
+    if extra_cells:
+        for extra in extra_cells:
+            cells.append({
+                "cell_type": "code",
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+                "source": extra
+            })
         
     cells.append({
         "cell_type": "code",
@@ -176,14 +186,58 @@ create_nb(
         "            clip = waveform[start_sample:end_sample]\n",
         "            \n",
         "            # Tạo thẻ <audio> bằng IPython.display\n",
-        "            audio_widget = ipd.Audio(data=clip, rate=sr)\n",
-        "            audio_html = audio_widget._repr_html_()\n",
+        "            if len(clip) == 0:\n",
+        "                audio_html = 'Audio file quá ngắn (Sai file?)'\n",
+        "            else:\n",
+        "                audio_widget = ipd.Audio(data=clip, rate=sr)\n",
+        "                audio_html = audio_widget._repr_html_()\n",
         "            \n",
         "            html_out += f\"<tr><td><b>{spk}</b></td><td>{start:.2f}s - {end:.2f}s</td><td>{audio_html}</td></tr>\"\n",
         "        html_out += \"</table>\"\n",
         "        display(HTML(html_out))\n",
         "except Exception as e:\n",
         "    print('Có lỗi khi tạo bảng nghe thử:', e)\n"
+    ],
+    extra_cells=[
+        [
+            "# ==========================================\n",
+            "# CELL HIỂN THỊ CÁC CHUNK MÀ VAD ĐÃ CHIA\n",
+            "# ==========================================\n",
+            "import json\n",
+            "import librosa\n",
+            "import IPython.display as ipd\n",
+            "from IPython.core.display import display, HTML\n\n",
+            "try:\n",
+            "    with open(OUT_JSON, 'r') as f:\n",
+            "        data = json.load(f)\n",
+            "    \n",
+            "    chunks = data.get('vad_chunks', [])\n",
+            "    if not chunks:\n",
+            "        print('Không tìm thấy thông tin VAD chunks trong file JSON. Bạn cần chạy lại Stage 01 với phiên bản code mới nhất để dữ liệu này được lưu lại.')\n",
+            "    else:\n",
+            "        print(f'Đang tải audio để hiển thị {len(chunks)} chunks...')\n",
+            "        waveform, sr = librosa.load(AUDIO_INPUT, sr=16000)\n",
+            "        html_out = \"<table border='1' style='width:100%; text-align:center;'>\"\n",
+            "        html_out += \"<tr><th>Chunk ID</th><th>Thời gian bắt đầu</th><th>Thời gian kết thúc</th><th>Độ dài Chunk</th><th>Nghe thử</th></tr>\"\n\n",
+            "        for i, c in enumerate(chunks):\n",
+            "            start = c['offset']\n",
+            "            dur = c['duration']\n",
+            "            end = start + dur\n",
+            "            \n",
+            "            start_sample = int(start * sr)\n",
+            "            end_sample = int(end * sr)\n",
+            "            clip = waveform[start_sample:end_sample]\n",
+            "            if len(clip) == 0:\n",
+            "                audio_html = 'Lỗi độ dài'\n",
+            "            else:\n",
+            "                audio_html = ipd.Audio(data=clip, rate=sr)._repr_html_()\n",
+            "                \n",
+            "            html_out += f\"<tr><td><b>Chunk_{i+1:03d}</b></td><td>{start:.2f}s</td><td>{end:.2f}s</td><td>{dur:.2f}s</td><td>{audio_html}</td></tr>\"\n\n",
+            "        html_out += \"</table>\"\n",
+            "        display(HTML(html_out))\n",
+            "except Exception as e:\n",
+            "    print('Có lỗi khi tạo bảng:', e)\n"
+        ]
     ]
 )
 

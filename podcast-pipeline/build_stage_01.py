@@ -244,6 +244,7 @@ def main() -> None:
         "audio_name": audio_info["name"],
         "sample_rate": audio_info["sample_rate"],
         "audio_duration_seconds": audio_duration,
+        "vad_chunks": [{"offset": c["offset"], "duration": c["duration"]} for c in diar_chunks],
         "segments": stage_common.clean_segments_for_json(segments),
         "metadata": {
             "stage": "diarize",
