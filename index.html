@@ -52,6 +52,7 @@
     background: var(--card); font-weight: 600; font-size: 11px; text-transform: uppercase;
     letter-spacing: 0.5px; color: var(--muted); }
   table td { padding: 8px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+  tbody tr { cursor: pointer; }
   table tr:hover { background: #fafafa; }
   tr.active-row { background: #e3f2fd !important; outline: 2px solid var(--accent); transition: background 0.3s; }
   .seg-time { font-family: ui-monospace, monospace; font-size: 11.5px; color: #555;
@@ -223,13 +224,92 @@ function getSegmentChunkIndex(seg) {
 // player jump
 const playerFull = document.getElementById("player-full");
 const nowLabel = document.getElementById("now-label");
-function jumpFull(t, seg) {
-  playerFull.currentTime = t;
-  playerFull.play();
+let segmentPlayback = null;
+
+function pauseOtherAudio(except) {
+  document.querySelectorAll("audio").forEach(audio => {
+    if (audio !== except && !audio.paused) audio.pause();
+  });
+}
+
+function setNowPlaying(seg) {
   if (seg) {
     nowLabel.textContent = "#" + seg.index + " " + seg.speaker + " · " + fmtRange(seg.start, seg.end);
   }
 }
+
+function requestStickyPlay() {
+  pauseOtherAudio(playerFull);
+  const playPromise = playerFull.play();
+  if (playPromise && typeof playPromise.catch === "function") {
+    playPromise.catch(err => {
+      nowLabel.textContent = "Không play được: " + (err.message || err);
+    });
+  }
+}
+
+function playSegment(seg) {
+  if (!seg) return;
+  const start = Number(seg.start) || 0;
+  const end = Number(seg.end);
+  segmentPlayback = Number.isFinite(end) && end > start ? { start, end, seg } : null;
+  playerFull.currentTime = Math.max(0, start);
+  setNowPlaying(seg);
+  requestStickyPlay();
+}
+
+function jumpFull(t, seg) {
+  if (seg) {
+    playSegment(seg);
+    return;
+  }
+  segmentPlayback = null;
+  playerFull.currentTime = Math.max(0, Number(t) || 0);
+  requestStickyPlay();
+}
+
+function stopAtSegmentEnd() {
+  if (!segmentPlayback) return;
+  if (playerFull.currentTime >= segmentPlayback.end) {
+    playerFull.pause();
+    try {
+      playerFull.currentTime = segmentPlayback.end;
+    } catch (err) {
+      console.warn("seek failed", err);
+    }
+  }
+}
+
+function shouldIgnoreSpaceTarget(target) {
+  if (!target) return false;
+  const tag = (target.tagName || "").toLowerCase();
+  return target.isContentEditable || ["input", "textarea", "select", "button", "audio"].includes(tag);
+}
+
+function toggleStickyPlayer() {
+  if (!playerFull.paused) {
+    playerFull.pause();
+    return;
+  }
+  if (segmentPlayback && playerFull.currentTime >= segmentPlayback.end) {
+    playerFull.currentTime = segmentPlayback.start;
+  }
+  requestStickyPlay();
+}
+
+document.addEventListener("keydown", event => {
+  if ((event.code !== "Space" && event.key !== " ") || event.metaKey || event.ctrlKey || event.altKey) return;
+  if (shouldIgnoreSpaceTarget(event.target)) return;
+  event.preventDefault();
+  toggleStickyPlayer();
+});
+
+document.addEventListener("play", event => {
+  if (event.target && event.target.tagName === "AUDIO") {
+    pauseOtherAudio(event.target);
+    if (event.target !== playerFull) segmentPlayback = null;
+  }
+}, true);
 
 function initStageData() {
   DIAR_STATS = { counts: {}, durs: {} };
@@ -473,12 +553,16 @@ function renderTable(filterText, filterSpk, filterChunk, filterFlag) {
     tr.innerHTML =
       '<td>' + (s.index || '') + '</td>' +
       '<td class="seg-time">' + fmtRange(s.start, s.end) + '<div class="seg-dur">' + d.toFixed(2) + 's</div>' +
-        '<button class="jump-btn" data-t="' + s.start + '" data-i="' + idx + '">▶ in full</button></td>' +
+        '<button class="jump-btn" data-t="' + s.start + '" data-i="' + idx + '">▶ segment</button></td>' +
       '<td><span class="speaker-badge" style="background:' + c + '">' + speakerLabel + '</span></td>' +
       '<td style="text-align: center; vertical-align: middle; font-family: ui-monospace, monospace; font-weight: bold; color: #555;">' + chunkLabel + '</td>' +
       '<td>' + audioHtml + '</td>' +
       '<td class="seg-text">' + textHtml + '</td>' +
       '<td><div class="flags">' + flagsHTML(s) + '</div></td>';
+    tr.addEventListener("click", event => {
+      if (event.target.closest("audio")) event.preventDefault();
+      playSegment(s);
+    });
     tbody.appendChild(tr);
   });
   vcount.textContent = visible + " / " + SEGMENTS.length;
@@ -500,10 +584,10 @@ function renderTable(filterText, filterSpk, filterChunk, filterFlag) {
 
   // wire jump buttons
   tbody.querySelectorAll(".jump-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const t = parseFloat(btn.dataset.t);
+    btn.addEventListener("click", event => {
+      event.stopPropagation();
       const i = parseInt(btn.dataset.i);
-      jumpFull(t, SEGMENTS[i]);
+      playSegment(SEGMENTS[i]);
     });
   });
 }
@@ -540,6 +624,7 @@ renderTable("", "", "", "");
 
 let activeIndicesStr = "";
 playerFull.addEventListener("timeupdate", () => {
+  stopAtSegmentEnd();
   const t = playerFull.currentTime;
   const currentIndices = [];
   SEGMENTS.forEach((seg, idx) => {
