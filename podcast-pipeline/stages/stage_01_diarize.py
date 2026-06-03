@@ -1274,6 +1274,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_segment_duration", type=float, default=30.0)
     
     # Sortformer params
+    parser.add_argument("--sortformer-model-name", default="nvidia/diar_streaming_sortformer_4spk-v2.1")
     parser.add_argument("--sortformer-param", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--sortformer-pad-onset", type=float, default=0.0)
     parser.add_argument("--sortformer-pad-offset", type=float, default=0.0)
@@ -1335,7 +1336,8 @@ def main() -> None:
     if SortformerEncLabelModel is None:
         raise ImportError("nemo_toolkit[asr] is required")
         
-    diar_model = SortformerEncLabelModel.from_pretrained("nvidia/diar_sortformer_4spk-v1")
+    logger.info(f"Loading Sortformer model: {args.sortformer_model_name}")
+    diar_model = SortformerEncLabelModel.from_pretrained(args.sortformer_model_name)
     try:
         diar_model = diar_model.to(device)
     except Exception:
@@ -1470,6 +1472,7 @@ def main() -> None:
         "metadata": {
             "stage": "diarize",
             "device": device_name,
+            "sortformer_model_name": args.sortformer_model_name,
             "processing_time_seconds": elapsed,
             "postprocessing": postproc_stats,
             "reclustering": recluster_stats,
