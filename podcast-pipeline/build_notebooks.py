@@ -5,6 +5,7 @@ out_dir = "stages/notebooks"
 os.makedirs(out_dir, exist_ok=True)
 
 def create_nb(filename, title, install_cmd, run_cmd, zip_input, zip_output, eval_cmd=None, extra_cells=None):
+    zip_inputs = list(zip_input) if isinstance(zip_input, (list, tuple)) else [zip_input]
     cells = [
         {
             "cell_type": "markdown",
@@ -94,7 +95,11 @@ def create_nb(filename, title, install_cmd, run_cmd, zip_input, zip_output, eval
             "import os\n",
             "import subprocess\n",
             "from IPython.display import FileLink\n\n",
-            f"subprocess.run(['zip', '-r', '{zip_output}', '{zip_input}'])\n",
+            f"zip_inputs = {json.dumps(zip_inputs, ensure_ascii=False)}\n",
+            "zip_inputs = [path for path in zip_inputs if os.path.exists(path)]\n",
+            "if not zip_inputs:\n",
+            "    raise FileNotFoundError('Không tìm thấy file output nào để zip')\n",
+            f"subprocess.run(['zip', '-r', '{zip_output}', *zip_inputs], check=True)\n",
             f"FileLink('{zip_output}')"
         ]
     })
@@ -164,7 +169,13 @@ create_nb(
         "  --speaker-identity-min-duration {SPK_IDENTITY_MIN_DUR} \\\n",
         "  --speaker-recluster-threshold {SPK_RECLUSTER_TH}"
     ],
-    "/kaggle/working/diarization.json",
+    [
+        "/kaggle/working/diarization.json",
+        "/kaggle/working/sortformer_tuning.json",
+        "/kaggle/working/sortformer_tuning.html",
+        "/kaggle/working/speaker_diagnostics.json",
+        "/kaggle/working/vad_chunks.json",
+    ],
     "/kaggle/working/diarization_output.zip",
     eval_cmd=[
         "# ==========================================\n",

@@ -1,5 +1,6 @@
 import importlib
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -18,26 +19,51 @@ def import_stage_01_diarize():
     librosa = types.ModuleType("librosa")
     librosa.resample = lambda waveform, orig_sr, target_sr: waveform
     librosa.get_duration = lambda path: 0.0
-    sys.modules.setdefault("librosa", librosa)
+    sys.modules["librosa"] = librosa
 
     torch = types.ModuleType("torch")
     torch.Tensor = type("Tensor", (), {})
     torch.cuda = types.SimpleNamespace(is_available=lambda: False)
     torch.device = lambda name: name
-    sys.modules.setdefault("torch", torch)
+    sys.modules["torch"] = torch
 
     pydub = types.ModuleType("pydub")
     pydub.AudioSegment = type("AudioSegment", (), {})
-    sys.modules.setdefault("pydub", pydub)
-    sys.modules.setdefault("soundfile", types.ModuleType("soundfile"))
+    sys.modules["pydub"] = pydub
+    sys.modules["soundfile"] = types.ModuleType("soundfile")
+
+    nemo = types.ModuleType("nemo")
+    nemo_collections = types.ModuleType("nemo.collections")
+    nemo_asr = types.ModuleType("nemo.collections.asr")
+    nemo_asr_models = types.ModuleType("nemo.collections.asr.models")
+    nemo_asr_models.SortformerEncLabelModel = None
+    nemo_asr.models = nemo_asr_models
+    nemo_collections.asr = nemo_asr
+    nemo.collections = nemo_collections
+    sys.modules["nemo"] = nemo
+    sys.modules["nemo.collections"] = nemo_collections
+    sys.modules["nemo.collections.asr"] = nemo_asr
+    sys.modules["nemo.collections.asr.models"] = nemo_asr_models
+
+    pyannote = types.ModuleType("pyannote")
+    pyannote_audio = types.ModuleType("pyannote.audio")
+    pyannote_audio.Inference = None
+    pyannote.audio = pyannote_audio
+    sys.modules["pyannote"] = pyannote
+    sys.modules["pyannote.audio"] = pyannote_audio
 
     models = types.ModuleType("models")
     silero = types.ModuleType("models.silero_vad")
     silero.SAMPLING_RATE = 16000
-    silero.SileroVAD = type("SileroVAD", (), {})
+
+    class FakeSileroVAD:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    silero.SileroVAD = FakeSileroVAD
     models.silero_vad = silero
-    sys.modules.setdefault("models", models)
-    sys.modules.setdefault("models.silero_vad", silero)
+    sys.modules["models"] = models
+    sys.modules["models.silero_vad"] = silero
 
     utils = types.ModuleType("utils")
     tool = types.ModuleType("utils.tool")
@@ -57,9 +83,9 @@ def import_stage_01_diarize():
     logger_mod.Logger = FakeLogger
     utils.tool = tool
     utils.logger = logger_mod
-    sys.modules.setdefault("utils", utils)
-    sys.modules.setdefault("utils.tool", tool)
-    sys.modules.setdefault("utils.logger", logger_mod)
+    sys.modules["utils"] = utils
+    sys.modules["utils.tool"] = tool
+    sys.modules["utils.logger"] = logger_mod
 
     return importlib.import_module("stage_01_diarize")
 
@@ -170,6 +196,199 @@ class Stage01TraceTests(unittest.TestCase):
         self.assertEqual(summary["short_backchannel_segments"], 1)
         self.assertEqual(summary["manual_review_segments"], 1)
         self.assertEqual(summary["clean_identity_candidate_segments"], 1)
+
+    def test_build_sortformer_tuning_chunk_stores_probs_and_params(self):
+        stage_01 = import_stage_01_diarize()
+        logits = np.array(
+            [
+                [-2.0, 2.0],
+                [0.0, 1.0],
+                [2.0, -2.0],
+            ],
+            dtype=np.float32,
+        )
+        params = {
+            "onset": 0.53,
+            "offset": 0.49,
+            "min_duration_on": 0.42,
+            "min_duration_off": 0.34,
+            "sortformer_pad_onset": -0.15,
+            "sortformer_pad_offset": 0.05,
+        }
+
+        chunk = stage_01._build_sortformer_tuning_chunk(
+            chunk_index=2,
+            chunk={"offset": 180.0, "duration": 6.0},
+            probs=logits,
+            params=params,
+            predicted_segments=[["0.00 1.00 speaker_0"]],
+            precision=4,
+        )
+
+        self.assertEqual(chunk["chunk_index"], 2)
+        self.assertEqual(chunk["offset"], 180.0)
+        self.assertEqual(chunk["duration"], 6.0)
+        self.assertEqual(chunk["frame_count"], 3)
+        self.assertEqual(chunk["speaker_count"], 2)
+        self.assertAlmostEqual(chunk["frame_shift"], 2.0)
+        self.assertEqual(chunk["params"], params)
+        self.assertEqual(len(chunk["probs"]), 3)
+        self.assertAlmostEqual(chunk["probs"][0][0], 0.1192, places=4)
+        self.assertAlmostEqual(chunk["probs"][2][0], 0.8808, places=4)
+        self.assertEqual(chunk["raw_sortformer_segments"], ["0.00 1.00 speaker_0"])
+
+    def test_build_sortformer_tuning_artifact_summarizes_chunks(self):
+        stage_01 = import_stage_01_diarize()
+        defaults = {
+            "onset": 0.53,
+            "offset": 0.49,
+            "min_duration_on": 0.42,
+            "min_duration_off": 0.34,
+            "sortformer_pad_onset": 0.0,
+            "sortformer_pad_offset": 0.0,
+        }
+        chunks = [
+            {
+                "index": 0,
+                "offset": 0.0,
+                "duration": 5.0,
+                "frame_count": 2,
+                "speaker_count": 2,
+                "frame_shift": 2.5,
+                "probs": [[0.1, 0.9], [0.8, 0.2]],
+                "raw_segments": ["0.00 1.00 speaker_0"],
+            }
+        ]
+
+        artifact = stage_01._build_sortformer_tuning_artifact(
+            audio_path="/tmp/audio.wav",
+            audio_duration=5.0,
+            defaults=defaults,
+            chunks=chunks,
+        )
+
+        self.assertEqual(artifact["schema_version"], 1)
+        self.assertEqual(artifact["audio_path"], "/tmp/audio.wav")
+        self.assertEqual(artifact["audio_duration_seconds"], 5.0)
+        self.assertEqual(artifact["defaults"], defaults)
+        self.assertEqual(artifact["chunks"], chunks)
+        self.assertEqual(artifact["summary"]["chunk_count"], 1)
+        self.assertEqual(artifact["summary"]["chunks_with_probs"], 1)
+        self.assertEqual(artifact["summary"]["frame_count"], 2)
+        self.assertEqual(artifact["summary"]["total_frame_count"], 2)
+        self.assertEqual(artifact["summary"]["max_speaker_count"], 2)
+
+    def test_main_writes_sortformer_tuning_artifact_next_to_diarization(self):
+        stage_01 = import_stage_01_diarize()
+
+        class FakeSortformer:
+            @classmethod
+            def from_pretrained(cls, model_name):
+                return cls()
+
+            def to(self, device):
+                return self
+
+            def eval(self):
+                return None
+
+            def diarize(self, audio, batch_size, include_tensor_outputs):
+                self.called_with_tensor_outputs = include_tensor_outputs
+                return (
+                    [["0.00 1.00 speaker_0", "1.00 2.00 speaker_1"]],
+                    np.array([[[2.0, -2.0], [-2.0, 2.0]]], dtype=np.float32),
+                )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            out_path = tmp_path / "diarization.json"
+            args = types.SimpleNamespace(
+                input_audio=str(tmp_path / "audio.wav"),
+                out=str(out_path),
+                config_path="config.json",
+                seg_th=0.11,
+                min_cluster_size=11,
+                clust_th=0.5,
+                merge_gap=2.0,
+                same_speaker_merge_gap=0.3,
+                short_backchannel_seconds=1.0,
+                max_segment_duration=30.0,
+                sortformer_model_name="fake-sortformer",
+                sortformer_param=True,
+                sortformer_pad_onset=0.0,
+                sortformer_pad_offset=0.0,
+                onset=0.53,
+                offset=0.49,
+                min_duration_on=0.42,
+                min_duration_off=0.34,
+                use_custom_binarize=True,
+                save_sortformer_tuning=True,
+                sortformer_tuning_precision=4,
+                speaker_link_threshold=0.75,
+                speaker_link_margin=0.08,
+                speaker_weak_match_threshold=0.55,
+                speaker_centroid_update_threshold=0.85,
+                speaker_identity_min_duration=2.0,
+                speaker_review_label="SPEAKER_REVIEW",
+                speaker_recluster_threshold=0.7,
+            )
+
+            original_parse_args = stage_01.parse_args
+            original_load_cfg = stage_01.load_cfg
+            original_load_audio_info = stage_01.stage_common.load_audio_info
+            original_prepare_chunks = stage_01.prepare_diarization_chunks
+            original_sortformer = stage_01.SortformerEncLabelModel
+            try:
+                stage_01.parse_args = lambda: args
+                stage_01.load_cfg = lambda config_path: {
+                    "entrypoint": {"SAMPLE_RATE": 16000},
+                    "huggingface_token": "",
+                }
+                stage_01.stage_common.load_audio_info = lambda audio_path, sample_rate: {
+                    "waveform": np.zeros(32000, dtype=np.float32),
+                    "sample_rate": sample_rate,
+                    "name": "audio",
+                }
+                stage_01.prepare_diarization_chunks = lambda audio_path, audio_info: (
+                    [{"path": str(tmp_path / "chunk.wav"), "offset": 0.0, "duration": 2.0}],
+                    None,
+                )
+                stage_01.SortformerEncLabelModel = FakeSortformer
+
+                stage_01.main()
+            finally:
+                stage_01.parse_args = original_parse_args
+                stage_01.load_cfg = original_load_cfg
+                stage_01.stage_common.load_audio_info = original_load_audio_info
+                stage_01.prepare_diarization_chunks = original_prepare_chunks
+                stage_01.SortformerEncLabelModel = original_sortformer
+
+            tuning = stage_01.stage_common.load_json(tmp_path / "sortformer_tuning.json")
+            diarization = stage_01.stage_common.load_json(out_path)
+            tuning_viewer = (tmp_path / "sortformer_tuning.html").read_text(encoding="utf-8")
+
+        self.assertEqual(tuning["schema_version"], 1)
+        self.assertEqual(tuning["audio_path"], str((tmp_path / "audio.wav").resolve()))
+        self.assertEqual(tuning["audio_duration_seconds"], 2.0)
+        self.assertEqual(tuning["summary"]["chunk_count"], 1)
+        self.assertEqual(tuning["summary"]["chunks_with_probs"], 1)
+        self.assertEqual(tuning["summary"]["frame_count"], 2)
+        self.assertEqual(tuning["chunks"][0]["index"], 0)
+        self.assertEqual(tuning["chunks"][0]["speaker_count"], 2)
+        self.assertAlmostEqual(tuning["chunks"][0]["frame_shift"], 1.0)
+        self.assertAlmostEqual(tuning["chunks"][0]["probs"][0][0], 0.8808, places=4)
+        self.assertEqual(tuning["chunks"][0]["raw_segments"][0], "0.00 1.00 speaker_0")
+        self.assertIn("audio.wav", tuning["audio_candidates"])
+        self.assertIn("window.SORTFORMER_TUNING_DATA = {", tuning_viewer)
+        self.assertIn('"schema_version": 1', tuning_viewer)
+        self.assertEqual(
+            diarization["metadata"]["sortformer_tuning_path"],
+            str(tmp_path / "sortformer_tuning.json"),
+        )
+        self.assertEqual(
+            diarization["metadata"]["sortformer_tuning_viewer_path"],
+            str(tmp_path / "sortformer_tuning.html"),
+        )
 
     def test_align_speakers_adds_stage1_link_trace(self):
         stage_01 = import_stage_01_diarize()

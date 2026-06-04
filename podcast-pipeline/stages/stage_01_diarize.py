@@ -140,6 +140,235 @@ def custom_binarize(probs: np.ndarray, frame_shift: float, onset: float, offset:
                 
     return segments
 
+
+def _tensor_like_to_numpy(value) -> np.ndarray | None:
+    """Convert tensor-like Sortformer outputs to numpy without importing heavy APIs in tests."""
+    if value is None:
+        return None
+    if isinstance(value, np.ndarray):
+        return value
+    if hasattr(value, "detach"):
+        value = value.detach()
+    if hasattr(value, "cpu"):
+        value = value.cpu()
+    if hasattr(value, "numpy"):
+        try:
+            return value.numpy()
+        except Exception:
+            return None
+    try:
+        arr = np.asarray(value)
+    except Exception:
+        return None
+    if arr.dtype == object:
+        return None
+    return arr
+
+
+def _extract_sortformer_probs(tensor_outputs) -> np.ndarray | None:
+    """
+    Extract a [frames, speakers] probability/logit matrix from NeMo Sortformer output.
+
+    Sortformer versions can return a tensor, a one-item tensor list, or a dict
+    with a tensor under `preds`. This helper normalizes those shapes for both
+    runtime and lightweight tests.
+    """
+    if isinstance(tensor_outputs, dict):
+        for key in ("probs", "preds", "logits", "outputs", "predictions"):
+            if key in tensor_outputs:
+                probs = _extract_sortformer_probs(tensor_outputs[key])
+                if probs is not None:
+                    return probs
+        return None
+    elif isinstance(tensor_outputs, (list, tuple)):
+        matrix_candidate = _tensor_like_to_numpy(tensor_outputs)
+        if matrix_candidate is not None and matrix_candidate.ndim >= 2:
+            return _extract_sortformer_probs(matrix_candidate)
+        for item in tensor_outputs:
+            probs = _extract_sortformer_probs(item)
+            if probs is not None:
+                return probs
+        return None
+
+    probs = _tensor_like_to_numpy(tensor_outputs)
+    if probs is None:
+        return None
+
+    probs = np.asarray(probs, dtype=np.float32)
+    while probs.ndim > 2 and probs.shape[0] == 1:
+        probs = probs.squeeze(0)
+    if probs.ndim == 3:
+        probs = probs[0]
+    if probs.ndim == 1:
+        probs = probs.reshape((-1, 1))
+    if probs.ndim != 2 or probs.size == 0:
+        return None
+
+    finite_values = probs[np.isfinite(probs)]
+    if finite_values.size == 0:
+        return None
+    if float(finite_values.min()) < 0.0 or float(finite_values.max()) > 1.0:
+        probs = 1.0 / (1.0 + np.exp(-np.clip(probs, -80.0, 80.0)))
+    probs = np.nan_to_num(probs, nan=0.0, posinf=1.0, neginf=0.0)
+    return np.clip(probs, 0.0, 1.0).astype(np.float32)
+
+
+def _flatten_sortformer_segments(predicted_segments) -> list[str]:
+    flattened: list[str] = []
+
+    def visit(value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            flattened.append(value)
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                visit(item)
+            return
+        flattened.append(str(value))
+
+    visit(predicted_segments)
+    return flattened
+
+
+def _build_sortformer_tuning_chunk(
+    *,
+    chunk_index: int,
+    chunk: dict,
+    probs,
+    params: dict,
+    predicted_segments=None,
+    precision: int = 4,
+) -> dict:
+    normalized_probs = _extract_sortformer_probs(probs)
+    if normalized_probs is None:
+        raise ValueError("Sortformer tuning chunk requires a 2D probs/logits matrix")
+
+    frame_count, speaker_count = normalized_probs.shape
+    duration = float(chunk.get("duration", 0.0) or 0.0)
+    frame_shift = duration / frame_count if frame_count else 0.0
+    precision = max(0, int(precision))
+    raw_segments = _flatten_sortformer_segments(predicted_segments)
+
+    return {
+        "index": int(chunk_index),
+        "chunk_index": int(chunk_index),
+        "offset": round(float(chunk.get("offset", 0.0) or 0.0), 6),
+        "duration": round(duration, 6),
+        "chunk_duration": round(duration, 6),
+        "frame_count": int(frame_count),
+        "speaker_count": int(speaker_count),
+        "frame_shift": round(float(frame_shift), 9),
+        "params": copy.deepcopy(params),
+        "probs": np.round(normalized_probs, precision).tolist(),
+        "raw_segments": raw_segments,
+        "raw_sortformer_segments": raw_segments,
+    }
+
+
+def _sortformer_tuning_params_from_args(args) -> dict:
+    return {
+        "onset": float(args.onset),
+        "offset": float(args.offset),
+        "min_duration_on": float(args.min_duration_on),
+        "min_duration_off": float(args.min_duration_off),
+        "sortformer_pad_onset": float(args.sortformer_pad_onset),
+        "sortformer_pad_offset": float(args.sortformer_pad_offset),
+    }
+
+
+def _build_sortformer_tuning_artifact(
+    *,
+    audio_path,
+    audio_duration: float,
+    chunks: list[dict],
+    defaults: dict | None = None,
+    params: dict | None = None,
+    audio_info: dict | None = None,
+    model_name: str | None = None,
+) -> dict:
+    resolved_defaults = copy.deepcopy(defaults if defaults is not None else (params or {}))
+    frame_count = int(sum(chunk.get("frame_count", 0) for chunk in chunks))
+    summary = {
+        "chunk_count": len(chunks),
+        "chunks_with_probs": sum(1 for chunk in chunks if chunk.get("probs")),
+        "frame_count": frame_count,
+        "total_frame_count": frame_count,
+        "max_speaker_count": int(max([chunk.get("speaker_count", 0) for chunk in chunks] or [0])),
+        "raw_segment_count": int(sum(len(chunk.get("raw_segments") or []) for chunk in chunks)),
+    }
+    artifact = {
+        "schema_version": 1,
+        "audio_path": str(audio_path),
+        "audio_duration_seconds": float(audio_duration),
+        "defaults": resolved_defaults,
+        "chunks": copy.deepcopy(chunks),
+        "summary": summary,
+    }
+    if audio_info is not None:
+        artifact["audio_name"] = audio_info.get("name", Path(audio_path).name)
+    if model_name is not None:
+        artifact["sortformer_model_name"] = model_name
+    return artifact
+
+
+def _build_sortformer_audio_candidates(audio_path, artifact_path=None) -> list[str]:
+    audio_path = Path(audio_path)
+    candidates: list[str] = []
+
+    def add(candidate):
+        if not candidate:
+            return
+        candidate = str(candidate)
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    if artifact_path is not None:
+        try:
+            add(os.path.relpath(audio_path, Path(artifact_path).parent))
+        except ValueError:
+            pass
+
+    add(str(audio_path))
+    add(audio_path.name)
+
+    common_suffixes = [audio_path.suffix] if audio_path.suffix else []
+    for suffix in [".wav", ".mp3", ".m4a", ".flac", ".ogg"]:
+        if suffix not in common_suffixes:
+            common_suffixes.append(suffix)
+    for suffix in common_suffixes:
+        add(f"../00_input/full{suffix}")
+        if audio_path.name:
+            add(f"../00_input/{audio_path.name}")
+
+    return candidates
+
+
+def _write_sortformer_tuning_viewer(artifact: dict, viewer_path, logger=None) -> bool:
+    viewer_path = Path(viewer_path)
+    repo_root = Path(__file__).resolve().parents[2]
+    template_candidates = [
+        repo_root / "tools" / "sortformer_tuning_viewer.html",
+        Path.cwd() / "tools" / "sortformer_tuning_viewer.html",
+    ]
+    template_path = next((path for path in template_candidates if path.exists()), None)
+    if template_path is None:
+        if logger is not None:
+            logger.warning("Sortformer tuning viewer template not found; skipped HTML export.")
+        return False
+
+    html = template_path.read_text(encoding="utf-8")
+    placeholder = "window.SORTFORMER_TUNING_DATA = null;"
+    payload = json.dumps(artifact, ensure_ascii=False).replace("</", "<\\/")
+    if placeholder not in html:
+        if logger is not None:
+            logger.warning("Sortformer tuning viewer template placeholder not found; skipped HTML export.")
+        return False
+
+    viewer_path.write_text(html.replace(placeholder, f"window.SORTFORMER_TUNING_DATA = {payload};"), encoding="utf-8")
+    return True
+
 def sortformer_dia(predicted_segments):
     """
     Chuyển output thô của NeMo Sortformer thành DataFrame diarization chuẩn.
@@ -1283,6 +1512,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-duration-on", type=float, default=0.42)
     parser.add_argument("--min-duration-off", type=float, default=0.34)
     parser.add_argument("--use-custom-binarize", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--save-sortformer-tuning", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--sortformer-tuning-precision", type=int, default=4)
     
     # Re-cluster
     parser.add_argument("--speaker-link-threshold", type=float, default=0.75)
@@ -1351,56 +1582,63 @@ def main() -> None:
     start_time = time.time()
     diar_chunks, temp_chunk_dir = prepare_diarization_chunks(str(audio_path), audio_info)
     diarization_frames = []
+    sortformer_tuning_chunks = []
+    sortformer_tuning_params = _sortformer_tuning_params_from_args(args)
 
     try:
-        for chunk in diar_chunks:
+        for chunk_index, chunk in enumerate(diar_chunks):
             predicted_segments, tensor_outputs = diar_model.diarize(
                 audio=chunk["path"], batch_size=1, include_tensor_outputs=True
             )
             
             chunk_df = None
-            if getattr(pipe_args, "use_custom_binarize", False) and tensor_outputs is not None:
-                probs = None
-                if isinstance(tensor_outputs, torch.Tensor):
-                    probs = tensor_outputs.squeeze(0).cpu().numpy()
-                elif isinstance(tensor_outputs, list) and len(tensor_outputs) > 0 and isinstance(tensor_outputs[0], torch.Tensor):
-                    probs = tensor_outputs[0].squeeze(0).cpu().numpy()
-                elif isinstance(tensor_outputs, dict) and "preds" in tensor_outputs:
-                    probs = tensor_outputs["preds"].squeeze(0).cpu().numpy()
+            probs = _extract_sortformer_probs(tensor_outputs)
+            if args.save_sortformer_tuning and probs is not None:
+                try:
+                    tuning_chunk = _build_sortformer_tuning_chunk(
+                        chunk_index=chunk_index,
+                        chunk=chunk,
+                        probs=probs,
+                        params=sortformer_tuning_params,
+                        predicted_segments=predicted_segments,
+                        precision=args.sortformer_tuning_precision,
+                    )
+                    if tuning_chunk is not None:
+                        sortformer_tuning_chunks.append(tuning_chunk)
+                except Exception as exc:
+                    logger.warning(f"Could not build Sortformer tuning chunk {chunk_index}: {exc}")
+
+            if getattr(pipe_args, "use_custom_binarize", False) and probs is not None:
+                try:
+                    chunk_duration = float(chunk.get("duration") or librosa.get_duration(path=chunk["path"]))
+                    frame_shift = chunk_duration / probs.shape[0]
+                    onset = float(getattr(pipe_args, "onset", 0.53))
+                    offset = float(getattr(pipe_args, "offset", 0.49))
+                    min_duration_on = float(getattr(pipe_args, "min_duration_on", 0.42))
+                    min_duration_off = float(getattr(pipe_args, "min_duration_off", 0.34))
                     
-                if probs is not None:
-                    if probs.min() < 0 or probs.max() > 1.0:
-                        probs = 1.0 / (1.0 + np.exp(-probs))
-                    try:
-                        chunk_duration = float(librosa.get_duration(path=chunk["path"]))
-                        frame_shift = chunk_duration / probs.shape[0]
-                        onset = float(getattr(pipe_args, "onset", 0.53))
-                        offset = float(getattr(pipe_args, "offset", 0.49))
-                        min_duration_on = float(getattr(pipe_args, "min_duration_on", 0.42))
-                        min_duration_off = float(getattr(pipe_args, "min_duration_off", 0.34))
+                    if getattr(pipe_args, "_logged_custom_binarize", None) != True:
+                        logger.info(f"Applying custom binarize -> onset: {onset}, offset: {offset}")
+                        setattr(pipe_args, "_logged_custom_binarize", True)
                         
-                        if getattr(pipe_args, "_logged_custom_binarize", None) != True:
-                            logger.info(f"Applying custom binarize -> onset: {onset}, offset: {offset}")
-                            setattr(pipe_args, "_logged_custom_binarize", True)
-                            
-                        custom_segments = custom_binarize(probs, frame_shift, onset, offset, min_duration_on, min_duration_off)
-                        chunk_df = pd.DataFrame(custom_segments)
-                        if not chunk_df.empty:
-                            chunk_df = chunk_df.sort_values(by="start").reset_index(drop=True)
-                            chunk_df["label"] = [chr(ord('A') + i) for i in range(len(chunk_df))]
-                            def fmt(sec):
-                                td = datetime.timedelta(seconds=sec)
-                                hrs = td.seconds // 3600 + td.days * 24
-                                mins = (td.seconds // 60) % 60
-                                secs = td.seconds % 60
-                                ms = int(td.microseconds / 1000)
-                                return f"{hrs:02d}:{mins:02d}:{secs:02d}.{ms:03d}"
-                            chunk_df["segment"] = chunk_df.apply(lambda row: f"[ {fmt(row['start'])} --> {fmt(row['end'])}]", axis=1)
-                        else:
-                            chunk_df = pd.DataFrame(columns=['segment','label','speaker','start','end'])
-                    except Exception as e:
-                        logger.warning(f"Custom binarize failed: {e}")
-                        chunk_df = None
+                    custom_segments = custom_binarize(probs, frame_shift, onset, offset, min_duration_on, min_duration_off)
+                    chunk_df = pd.DataFrame(custom_segments)
+                    if not chunk_df.empty:
+                        chunk_df = chunk_df.sort_values(by="start").reset_index(drop=True)
+                        chunk_df["label"] = [chr(ord('A') + i) for i in range(len(chunk_df))]
+                        def fmt(sec):
+                            td = datetime.timedelta(seconds=sec)
+                            hrs = td.seconds // 3600 + td.days * 24
+                            mins = (td.seconds // 60) % 60
+                            secs = td.seconds % 60
+                            ms = int(td.microseconds / 1000)
+                            return f"{hrs:02d}:{mins:02d}:{secs:02d}.{ms:03d}"
+                        chunk_df["segment"] = chunk_df.apply(lambda row: f"[ {fmt(row['start'])} --> {fmt(row['end'])}]", axis=1)
+                    else:
+                        chunk_df = pd.DataFrame(columns=['segment','label','speaker','start','end'])
+                except Exception as e:
+                    logger.warning(f"Custom binarize failed: {e}")
+                    chunk_df = None
                         
             if chunk_df is None:
                 chunk_df = sortformer_dia(predicted_segments)
@@ -1457,6 +1695,8 @@ def main() -> None:
         recluster_stats=recluster_stats,
     )
     speaker_diag_out_path = Path(out_path).parent / "speaker_diagnostics.json"
+    sortformer_tuning_out_path = Path(out_path).parent / "sortformer_tuning.json"
+    sortformer_tuning_viewer_path = Path(out_path).parent / "sortformer_tuning.html"
     
     elapsed = time.time() - start_time
     logger.info(f"Diarization finished in {elapsed:.2f}s.")
@@ -1478,6 +1718,8 @@ def main() -> None:
             "reclustering": recluster_stats,
             "speaker_linking": speaker_linking_stats,
             "speaker_diagnostics_path": str(speaker_diag_out_path),
+            "sortformer_tuning_path": str(sortformer_tuning_out_path) if args.save_sortformer_tuning else "",
+            "sortformer_tuning_viewer_path": str(sortformer_tuning_viewer_path) if args.save_sortformer_tuning else "",
         },
     }
     
@@ -1485,6 +1727,21 @@ def main() -> None:
     logger.info(f"Saved diarization to {out_path}")
     stage_common.dump_json(speaker_diagnostics, speaker_diag_out_path)
     logger.info(f"Saved speaker diagnostics to {speaker_diag_out_path}")
+
+    if args.save_sortformer_tuning:
+        sortformer_tuning = _build_sortformer_tuning_artifact(
+            audio_path=audio_path,
+            audio_info=audio_info,
+            audio_duration=audio_duration,
+            chunks=sortformer_tuning_chunks,
+            defaults=sortformer_tuning_params,
+            model_name=args.sortformer_model_name,
+        )
+        sortformer_tuning["audio_candidates"] = _build_sortformer_audio_candidates(audio_path, sortformer_tuning_out_path)
+        stage_common.dump_json(sortformer_tuning, sortformer_tuning_out_path)
+        logger.info(f"Saved Sortformer tuning artifact to {sortformer_tuning_out_path}")
+        if _write_sortformer_tuning_viewer(sortformer_tuning, sortformer_tuning_viewer_path, logger=logger):
+            logger.info(f"Saved Sortformer tuning viewer to {sortformer_tuning_viewer_path}")
     
     # Save VAD chunks to a separate vad_chunks.json file in the same directory
     vad_out_path = Path(out_path).parent / "vad_chunks.json"

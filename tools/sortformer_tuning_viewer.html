@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sortformer Tuning</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --panel: #fff;
+    --text: #1f2933;
+    --muted: #687484;
+    --border: #d9dee7;
+    --accent: #0f766e;
+    --accent-2: #2563eb;
+    --warn: #b45309;
+    --danger: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) minmax(320px, 680px);
+    gap: 14px;
+    align-items: center;
+    padding: 12px 18px;
+    background: rgba(255,255,255,0.96);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 2px 10px rgba(20, 29, 38, 0.05);
+  }
+  h1 { margin: 0; font-size: 18px; line-height: 1.2; }
+  .subtitle { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  audio { width: 100%; height: 34px; }
+  main { padding: 16px 18px 24px; }
+  .layout {
+    display: grid;
+    grid-template-columns: 360px minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+  .band {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .band h2 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #3b4756;
+  }
+  .stack { display: grid; gap: 12px; }
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  .metric {
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 9px 10px;
+    background: #fbfcfe;
+  }
+  .metric .label { font-size: 11px; color: var(--muted); }
+  .metric .value { margin-top: 2px; font-size: 18px; font-weight: 700; }
+  .control {
+    display: grid;
+    grid-template-columns: 124px minmax(110px, 1fr) 72px;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 9px;
+  }
+  .control label { font-size: 12px; color: #334155; }
+  .control input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .control input[type="number"] {
+    width: 72px;
+    padding: 5px 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font: inherit;
+  }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  button, .file-label {
+    border: 1px solid var(--border);
+    background: #fff;
+    color: #243241;
+    border-radius: 7px;
+    padding: 7px 10px;
+    font: inherit;
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:hover, .file-label:hover { border-color: #9aa7b8; }
+  input[type=file] { display: none; }
+  .status { min-height: 18px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+  .status.warn { color: var(--warn); }
+  .status.error { color: var(--danger); }
+  .timeline-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: #f9fafb; }
+  svg { display: block; min-width: 900px; width: 100%; height: 150px; }
+  .axis { font-size: 10px; fill: #6b7280; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .seg-rect { cursor: pointer; opacity: 0.86; }
+  .seg-rect:hover { opacity: 1; stroke: #111827; stroke-width: 1; }
+  .active-row { background: #dcfce7 !important; outline: 2px solid var(--accent); }
+  .table-wrap { overflow: auto; max-height: calc(100vh - 360px); border: 1px solid var(--border); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; background: #fff; }
+  th, td { padding: 7px 8px; border-bottom: 1px solid #edf0f5; text-align: left; vertical-align: top; }
+  th { position: sticky; top: 0; z-index: 1; background: #f8fafc; color: #526173; font-size: 11px; text-transform: uppercase; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: #f9fafb; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+  .speaker { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .command {
+    width: 100%;
+    min-height: 58px;
+    resize: vertical;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #1f2937;
+    background: #fbfcfe;
+  }
+  .loader-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .loader-row .file-label { text-align: center; }
+  @media (max-width: 980px) {
+    header { grid-template-columns: 1fr; }
+    .layout { grid-template-columns: 1fr; }
+    .metric-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Sortformer Tuning</h1>
+    <div class="subtitle" id="subtitle">Chưa có dữ liệu</div>
+  </div>
+  <audio id="player" controls preload="metadata"></audio>
+</header>
+
+<main>
+  <div class="layout">
+    <aside class="stack">
+      <section class="band">
+        <h2>Dữ liệu</h2>
+        <div class="loader-row">
+          <label class="file-label">Chọn JSON<input id="json-file" type="file" accept=".json,application/json"></label>
+          <label class="file-label">Chọn audio<input id="audio-file" type="file" accept="audio/*"></label>
+        </div>
+        <div class="status" id="load-status"></div>
+      </section>
+
+      <section class="band">
+        <h2>Tham số</h2>
+        <div id="controls"></div>
+        <div class="buttons">
+          <button id="reset-btn">Reset</button>
+          <button id="copy-btn" class="primary">Copy params</button>
+          <button id="download-btn">Tải JSON tuned</button>
+        </div>
+        <div class="status" id="action-status"></div>
+      </section>
+
+      <section class="band">
+        <h2>Command</h2>
+        <textarea class="command" id="command" readonly></textarea>
+      </section>
+    </aside>
+
+    <section class="stack">
+      <div class="metric-grid" id="metrics"></div>
+      <section class="band">
+        <h2>Timeline</h2>
+        <div class="timeline-wrap"><svg id="timeline" viewBox="0 0 1200 150" preserveAspectRatio="none"></svg></div>
+      </section>
+      <section class="band">
+        <h2>Segments</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Time</th><th>Speaker</th><th>Dur</th><th>Chunk</th></tr>
+            </thead>
+            <tbody id="segments"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </div>
+</main>
+
+<script>
+window.SORTFORMER_TUNING_DATA = null;
+</script>
+<script>
+const COLORS = ["#2563eb", "#dc2626", "#16a34a", "#9333ea", "#ea580c", "#0891b2", "#be123c", "#4d7c0f"];
+const PARAMS = [
+  ["onset", "Onset", 0, 1, 0.01],
+  ["offset", "Offset", 0, 1, 0.01],
+  ["min_duration_on", "Min on", 0, 2, 0.01],
+  ["min_duration_off", "Min off", 0, 2, 0.01],
+  ["sortformer_pad_onset", "Pad start", -1, 0.5, 0.01],
+  ["sortformer_pad_offset", "Pad end", -0.5, 1, 0.01],
+];
+
+let tuningData = window.SORTFORMER_TUNING_DATA;
+let params = {};
+let segments = [];
+let activeRange = null;
+
+const player = document.getElementById("player");
+const subtitle = document.getElementById("subtitle");
+const loadStatus = document.getElementById("load-status");
+const actionStatus = document.getElementById("action-status");
+
+function fmtTime(value) {
+  const t = Math.max(0, Number(value) || 0);
+  const minutes = Math.floor(t / 60);
+  const seconds = (t % 60).toFixed(2).padStart(5, "0");
+  return `${minutes}:${seconds}`;
+}
+
+function speakerName(index) {
+  return `SPEAKER_${String(index).padStart(2, "0")}`;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function customBinarize(probs, frameShift, options) {
+  const out = [];
+  if (!Array.isArray(probs) || !probs.length) return out;
+  const frameCount = probs.length;
+  const speakerCount = Array.isArray(probs[0]) ? probs[0].length : 0;
+
+  for (let spkIdx = 0; spkIdx < speakerCount; spkIdx++) {
+    let active = false;
+    let startFrame = 0;
+    const rawSegments = [];
+
+    for (let frameIdx = 0; frameIdx < frameCount; frameIdx++) {
+      const prob = Number(probs[frameIdx][spkIdx]) || 0;
+      if (!active && prob >= options.onset) {
+        active = true;
+        startFrame = frameIdx;
+      } else if (active && prob < options.offset) {
+        active = false;
+        rawSegments.push([startFrame * frameShift, frameIdx * frameShift]);
+      }
+    }
+    if (active) rawSegments.push([startFrame * frameShift, frameCount * frameShift]);
+
+    const merged = [];
+    rawSegments.forEach(seg => {
+      if (!merged.length) {
+        merged.push(seg);
+        return;
+      }
+      const last = merged[merged.length - 1];
+      if (seg[0] - last[1] <= options.min_duration_off) {
+        last[1] = seg[1];
+      } else {
+        merged.push(seg);
+      }
+    });
+
+    merged.forEach(seg => {
+      if (seg[1] - seg[0] >= options.min_duration_on) {
+        out.push({ speaker: speakerName(spkIdx), start: seg[0], end: seg[1] });
+      }
+    });
+  }
+  return out.sort((a, b) => a.start - b.start || a.end - b.end || a.speaker.localeCompare(b.speaker));
+}
+
+function buildSegments(data, currentParams) {
+  const duration = Number(data.audio_duration_seconds) || 0;
+  const built = [];
+  data.chunks.forEach(chunk => {
+    const frameShift = Number(chunk.frame_shift) || (Number(chunk.duration) / Math.max(1, Number(chunk.frame_count)));
+    customBinarize(chunk.probs, frameShift, currentParams).forEach(local => {
+      const start = clamp(Number(chunk.offset) + local.start + currentParams.sortformer_pad_onset, 0, duration || Infinity);
+      const end = clamp(Number(chunk.offset) + local.end + currentParams.sortformer_pad_offset, start, duration || Infinity);
+      if (end > start) {
+        built.push({
+          index: built.length,
+          speaker: local.speaker,
+          start,
+          end,
+          duration: end - start,
+          chunkIndex: chunk.chunk_index,
+        });
+      }
+    });
+  });
+  built.sort((a, b) => a.start - b.start || a.end - b.end || a.speaker.localeCompare(b.speaker));
+  built.forEach((seg, idx) => seg.index = idx);
+  return built;
+}
+
+function computeOverlap(sortedSegments) {
+  const events = [];
+  sortedSegments.forEach(seg => {
+    events.push([seg.start, 1]);
+    events.push([seg.end, -1]);
+  });
+  events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  let active = 0;
+  let last = null;
+  let overlap = 0;
+  events.forEach(([time, delta]) => {
+    if (last !== null && active > 1 && time > last) overlap += time - last;
+    active += delta;
+    last = time;
+  });
+  return overlap;
+}
+
+function metric(label, value) {
+  return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+}
+
+function renderMetrics() {
+  const speakers = new Set(segments.map(seg => seg.speaker));
+  const totalSpeech = segments.reduce((sum, seg) => sum + seg.duration, 0);
+  const avg = segments.length ? totalSpeech / segments.length : 0;
+  const shortCount = segments.filter(seg => seg.duration < 1).length;
+  const overlap = computeOverlap(segments);
+  document.getElementById("metrics").innerHTML = [
+    metric("Segments", segments.length),
+    metric("Speakers", speakers.size),
+    metric("Speech", `${totalSpeech.toFixed(1)}s`),
+    metric("Overlap", `${overlap.toFixed(1)}s`),
+    metric("Avg dur", `${avg.toFixed(2)}s`),
+    metric("< 1s", shortCount),
+    metric("Chunks", tuningData?.chunks?.length || 0),
+    metric("Frames", tuningData?.summary?.frame_count || tuningData?.summary?.total_frame_count || 0),
+  ].join("");
+}
+
+function renderTimeline() {
+  const svg = document.getElementById("timeline");
+  const duration = Number(tuningData?.audio_duration_seconds) || Math.max(...segments.map(seg => seg.end), 1);
+  const width = 1200;
+  const height = 150;
+  const rowH = 18;
+  svg.innerHTML = "";
+
+  segments.forEach(seg => {
+    const speakerIdx = Number(seg.speaker.split("_").pop()) || 0;
+    const y = 14 + (speakerIdx % 6) * rowH;
+    const x = (seg.start / duration) * width;
+    const w = Math.max(1, ((seg.end - seg.start) / duration) * width);
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", x);
+    rect.setAttribute("y", y);
+    rect.setAttribute("width", w);
+    rect.setAttribute("height", rowH - 4);
+    rect.setAttribute("rx", 2);
+    rect.setAttribute("class", "seg-rect");
+    rect.setAttribute("fill", COLORS[speakerIdx % COLORS.length]);
+    rect.addEventListener("click", () => playSegment(seg));
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = `#${seg.index} ${seg.speaker} ${fmtTime(seg.start)}-${fmtTime(seg.end)}`;
+    rect.appendChild(title);
+    svg.appendChild(rect);
+  });
+
+  const tickStep = duration > 900 ? 300 : duration > 360 ? 60 : 30;
+  for (let t = 0; t <= duration + 0.01; t += tickStep) {
+    const x = (t / duration) * width;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", x);
+    line.setAttribute("x2", x);
+    line.setAttribute("y1", 0);
+    line.setAttribute("y2", height);
+    line.setAttribute("stroke", "#d7dde7");
+    line.setAttribute("stroke-width", "1");
+    svg.appendChild(line);
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", x + 3);
+    text.setAttribute("y", height - 8);
+    text.setAttribute("class", "axis");
+    text.textContent = `${Math.round(t)}s`;
+    svg.appendChild(text);
+  }
+}
+
+function renderTable() {
+  const tbody = document.getElementById("segments");
+  tbody.innerHTML = segments.map(seg => {
+    const speakerIdx = Number(seg.speaker.split("_").pop()) || 0;
+    return `<tr id="seg-row-${seg.index}" data-index="${seg.index}">
+      <td class="mono">${String(seg.index).padStart(5, "0")}</td>
+      <td class="mono">${fmtTime(seg.start)} - ${fmtTime(seg.end)}</td>
+      <td><span class="speaker"><span class="swatch" style="background:${COLORS[speakerIdx % COLORS.length]}"></span>${seg.speaker}</span></td>
+      <td class="mono">${seg.duration.toFixed(2)}s</td>
+      <td class="mono">${seg.chunkIndex}</td>
+    </tr>`;
+  }).join("");
+  tbody.querySelectorAll("tr").forEach(row => {
+    row.addEventListener("click", () => playSegment(segments[Number(row.dataset.index)]));
+  });
+}
+
+function updateCommand() {
+  const command = [
+    `--onset ${params.onset.toFixed(2)}`,
+    `--offset ${params.offset.toFixed(2)}`,
+    `--min-duration-on ${params.min_duration_on.toFixed(2)}`,
+    `--min-duration-off ${params.min_duration_off.toFixed(2)}`,
+    `--sortformer-pad-onset ${params.sortformer_pad_onset.toFixed(2)}`,
+    `--sortformer-pad-offset ${params.sortformer_pad_offset.toFixed(2)}`,
+    "--use-custom-binarize",
+  ].join(" ");
+  document.getElementById("command").value = command;
+}
+
+function renderAll() {
+  if (!tuningData) return;
+  segments = buildSegments(tuningData, params);
+  renderMetrics();
+  renderTimeline();
+  renderTable();
+  updateCommand();
+}
+
+function syncParam(key, value) {
+  params[key] = Number(value);
+  document.querySelector(`[data-range="${key}"]`).value = params[key];
+  document.querySelector(`[data-number="${key}"]`).value = params[key].toFixed(2);
+  renderAll();
+}
+
+function renderControls() {
+  const controls = document.getElementById("controls");
+  controls.innerHTML = PARAMS.map(([key, label, min, max, step]) => `
+    <div class="control">
+      <label for="${key}">${label}</label>
+      <input id="${key}" data-range="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${params[key]}">
+      <input data-number="${key}" type="number" min="${min}" max="${max}" step="${step}" value="${Number(params[key]).toFixed(2)}">
+    </div>
+  `).join("");
+
+  PARAMS.forEach(([key]) => {
+    document.querySelector(`[data-range="${key}"]`).addEventListener("input", event => syncParam(key, event.target.value));
+    document.querySelector(`[data-number="${key}"]`).addEventListener("change", event => syncParam(key, event.target.value));
+  });
+}
+
+function setData(data) {
+  tuningData = data;
+  params = Object.assign({
+    onset: 0.53,
+    offset: 0.49,
+    min_duration_on: 0.42,
+    min_duration_off: 0.34,
+    sortformer_pad_onset: 0,
+    sortformer_pad_offset: 0,
+  }, data.defaults || {});
+  subtitle.textContent = `${data.audio_name || "audio"} · ${Number(data.audio_duration_seconds || 0).toFixed(1)}s · ${data.summary?.chunk_count || data.chunks?.length || 0} chunks`;
+  renderControls();
+  setupAudio(data);
+  renderAll();
+}
+
+function setupAudio(data) {
+  const candidates = data.audio_candidates || [
+    "../00_input/full.wav",
+    "../00_input/full.mp3",
+    "../00_input/full.m4a",
+    "../00_input/full.flac",
+    data.audio_path,
+  ].filter(Boolean);
+  if (!player.getAttribute("src") && candidates.length) {
+    const first = candidates[0];
+    player.src = first.startsWith("/") ? `file://${encodeURI(first)}` : encodeURI(first);
+  }
+}
+
+function playSegment(seg) {
+  if (!seg) return;
+  activeRange = { start: seg.start, end: seg.end, index: seg.index };
+  player.currentTime = seg.start;
+  const playPromise = player.play();
+  if (playPromise && typeof playPromise.catch === "function") {
+    playPromise.catch(err => {
+      actionStatus.textContent = `Không phát được audio: ${err.message || err}`;
+      actionStatus.className = "status error";
+    });
+  }
+  document.querySelectorAll(".active-row").forEach(row => row.classList.remove("active-row"));
+  const row = document.getElementById(`seg-row-${seg.index}`);
+  if (row) row.classList.add("active-row");
+}
+
+player.addEventListener("timeupdate", () => {
+  if (activeRange && player.currentTime >= activeRange.end) {
+    player.pause();
+    player.currentTime = activeRange.end;
+  }
+});
+
+document.addEventListener("keydown", event => {
+  if ((event.key !== " " && event.code !== "Space") || event.metaKey || event.ctrlKey || event.altKey) return;
+  const tag = (event.target?.tagName || "").toLowerCase();
+  if (["input", "textarea", "select", "button"].includes(tag)) return;
+  event.preventDefault();
+  if (player.paused) {
+    player.play();
+  } else {
+    player.pause();
+  }
+});
+
+document.getElementById("reset-btn").addEventListener("click", () => {
+  if (!tuningData) return;
+  params = Object.assign(params, tuningData.defaults || {});
+  renderControls();
+  renderAll();
+});
+
+document.getElementById("copy-btn").addEventListener("click", async () => {
+  const text = document.getElementById("command").value;
+  try {
+    await navigator.clipboard.writeText(text);
+    actionStatus.textContent = "Đã copy params.";
+    actionStatus.className = "status";
+  } catch {
+    document.getElementById("command").select();
+    actionStatus.textContent = "Không copy tự động được, command đã được chọn.";
+    actionStatus.className = "status warn";
+  }
+});
+
+document.getElementById("download-btn").addEventListener("click", () => {
+  const payload = {
+    params,
+    metrics: {
+      segment_count: segments.length,
+      speech_duration_seconds: Number(segments.reduce((sum, seg) => sum + seg.duration, 0).toFixed(6)),
+      overlap_seconds: Number(computeOverlap(segments).toFixed(6)),
+    },
+    segments: segments.map(seg => ({
+      index: String(seg.index).padStart(5, "0"),
+      start: Number(seg.start.toFixed(6)),
+      end: Number(seg.end.toFixed(6)),
+      duration: Number(seg.duration.toFixed(6)),
+      speaker: seg.speaker,
+      chunk_index: seg.chunkIndex,
+    })),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "sortformer_tuned_segments.json";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById("json-file").addEventListener("change", event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      setData(JSON.parse(String(reader.result)));
+      loadStatus.textContent = `Đã load ${file.name}`;
+      loadStatus.className = "status";
+    } catch (err) {
+      loadStatus.textContent = `JSON lỗi: ${err.message || err}`;
+      loadStatus.className = "status error";
+    }
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById("audio-file").addEventListener("change", event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  player.src = URL.createObjectURL(file);
+  loadStatus.textContent = `Đã load audio ${file.name}`;
+  loadStatus.className = "status";
+});
+
+async function boot() {
+  if (tuningData) {
+    setData(tuningData);
+    loadStatus.textContent = "Đã load dữ liệu nhúng trong HTML.";
+    return;
+  }
+  try {
+    const res = await fetch("sortformer_tuning.json");
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    setData(await res.json());
+    loadStatus.textContent = "Đã load sortformer_tuning.json.";
+  } catch (err) {
+    loadStatus.textContent = "Chưa load được JSON tự động. Hãy chọn file sortformer_tuning.json.";
+    loadStatus.className = "status warn";
+  }
+}
+
+boot();
+</script>
+</body>
+</html>
