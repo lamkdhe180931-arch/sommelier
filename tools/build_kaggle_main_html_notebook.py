@@ -100,9 +100,11 @@ def main() -> None:
         code(
             """
             from pathlib import Path
+            import datetime
             import os
             import shlex
             import subprocess
+            import time
 
             LOG_DIR = Path(LOG_DIR_PATH)
             for _dir in [
@@ -110,6 +112,22 @@ def main() -> None:
                 EXPORT_DIR, FINAL_DIR, EVAL_DIR, PREVIEW_DIR, LOG_DIR_PATH,
             ]:
                 Path(_dir).mkdir(parents=True, exist_ok=True)
+
+            AUDIO_TIMING = {}
+
+            def fmt_duration(seconds):
+                seconds = float(seconds or 0.0)
+                hours = int(seconds // 3600)
+                minutes = int((seconds % 3600) // 60)
+                secs = seconds % 60
+                if hours:
+                    return f"{hours}h {minutes:02d}m {secs:05.2f}s"
+                if minutes:
+                    return f"{minutes}m {secs:05.2f}s"
+                return f"{secs:.2f}s"
+
+            def now_label():
+                return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             def _format_cmd(cmd):
                 if isinstance(cmd, (list, tuple)):
@@ -251,6 +269,12 @@ def main() -> None:
             """
             from pathlib import Path
 
+            AUDIO_TIMING["audio_job_start_perf"] = time.perf_counter()
+            AUDIO_TIMING["audio_job_start_clock"] = now_label()
+            AUDIO_TIMING["audio_job_start_label"] = "start: tìm audio input + chuẩn hóa về 16 kHz"
+            print("Audio timing start:", AUDIO_TIMING["audio_job_start_clock"])
+            print("Measured from:", AUDIO_TIMING["audio_job_start_label"])
+
             audio_exts = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus"}
             audio_candidates = sorted(
                 p for p in Path("/kaggle/input").rglob("*")
@@ -270,6 +294,11 @@ def main() -> None:
                 cmd += ["-t", str(AUDIO_LIMIT_SECONDS)]
             cmd += ["-ac", "1", "-ar", "16000", AUDIO_WAV]
             run_logged(cmd, "00_prepare_audio_ffmpeg.log", cwd="/kaggle/working", tail=20)
+            AUDIO_TIMING["audio_prepare_done_perf"] = time.perf_counter()
+            AUDIO_TIMING["audio_prepare_seconds"] = (
+                AUDIO_TIMING["audio_prepare_done_perf"] - AUDIO_TIMING["audio_job_start_perf"]
+            )
+            print("Audio prepare runtime:", fmt_duration(AUDIO_TIMING["audio_prepare_seconds"]))
             """
         ),
         code(
@@ -278,8 +307,11 @@ def main() -> None:
             from IPython.display import Audio, display
 
             audio = AudioSegment.from_file(AUDIO_WAV)
+            AUDIO_DURATION_SECONDS = len(audio) / 1000
+            AUDIO_TIMING["audio_duration_seconds"] = AUDIO_DURATION_SECONDS
             print("Audio:", AUDIO_WAV)
-            print("Duration seconds:", len(audio) / 1000)
+            print("Duration seconds:", AUDIO_DURATION_SECONDS)
+            print(f"Audio timeline: 0.00s -> {AUDIO_DURATION_SECONDS:.2f}s ({fmt_duration(AUDIO_DURATION_SECONDS)})")
             print("Frame rate:", audio.frame_rate)
             print("Channels:", audio.channels)
 
@@ -361,7 +393,17 @@ def main() -> None:
                 "--sortformer-pad-onset", str(SORTFORMER_PAD_ONSET),
                 "--sortformer-pad-offset", str(SORTFORMER_PAD_OFFSET),
             ]
-            run_logged(cmd, "18_main_pipeline.log", cwd="/kaggle/working/sommelier/podcast-pipeline", tail=80)
+            MAIN_PIPELINE_START_PERF = time.perf_counter()
+            MAIN_PIPELINE_START_CLOCK = now_label()
+            print("Main pipeline timing start:", MAIN_PIPELINE_START_CLOCK)
+            try:
+                run_logged(cmd, "18_main_pipeline.log", cwd="/kaggle/working/sommelier/podcast-pipeline", tail=80)
+            finally:
+                MAIN_PIPELINE_END_PERF = time.perf_counter()
+                MAIN_PIPELINE_END_CLOCK = now_label()
+                MAIN_PIPELINE_RUNTIME_SECONDS = MAIN_PIPELINE_END_PERF - MAIN_PIPELINE_START_PERF
+                print("Main pipeline timing end:", MAIN_PIPELINE_END_CLOCK)
+                print("Main pipeline runtime:", fmt_duration(MAIN_PIPELINE_RUNTIME_SECONDS), f"({MAIN_PIPELINE_RUNTIME_SECONDS:.2f}s)")
             """
         ),
         md("## 8. Dựng artifact `run_full` cho HTML viewer"),
@@ -626,6 +668,7 @@ def main() -> None:
             import zipfile
             from IPython.display import FileLink, display
 
+            ZIP_START_PERF = time.perf_counter()
             zip_path = Path("/kaggle/working/sommelier_main_html_outputs.zip")
             if zip_path.exists():
                 zip_path.unlink()
@@ -637,11 +680,35 @@ def main() -> None:
                         if path.is_file():
                             zf.write(path, arcname=path.relative_to("/kaggle/working"))
 
+            ZIP_END_PERF = time.perf_counter()
+            ZIP_RUNTIME_SECONDS = ZIP_END_PERF - ZIP_START_PERF
+            AUDIO_TIMING["audio_job_end_perf"] = time.perf_counter()
+            AUDIO_TIMING["audio_job_end_clock"] = now_label()
+            AUDIO_TIMING["audio_job_end_label"] = "end: HTML + zip output ready"
+            AUDIO_JOB_RUNTIME_SECONDS = AUDIO_TIMING["audio_job_end_perf"] - AUDIO_TIMING["audio_job_start_perf"]
+
             print("Created:", zip_path)
             print("Zip includes:")
             print("- run_full/index.html")
             print("- run_viewer/index.html")
             print("- run_full/00_input, 01_diarization, 02_music_clean, 03_overlap, 04_asr, 05_export, 06_eval, logs")
+            print()
+            print("=== AUDIO RUNTIME SUMMARY ===")
+            print("Input audio:", AUDIO_IN)
+            print("Measured from:", AUDIO_TIMING["audio_job_start_label"])
+            print("Measured to:", AUDIO_TIMING["audio_job_end_label"])
+            print("Start clock:", AUDIO_TIMING["audio_job_start_clock"])
+            print("End clock:", AUDIO_TIMING["audio_job_end_clock"])
+            print(f"Audio timeline: 0.00s -> {AUDIO_DURATION_SECONDS:.2f}s")
+            print("Audio length:", fmt_duration(AUDIO_DURATION_SECONDS), f"({AUDIO_DURATION_SECONDS:.2f}s)")
+            print("Audio job wall time:", fmt_duration(AUDIO_JOB_RUNTIME_SECONDS), f"({AUDIO_JOB_RUNTIME_SECONDS:.2f}s)")
+            print("Audio prepare time:", fmt_duration(AUDIO_TIMING.get("audio_prepare_seconds", 0.0)))
+            if "MAIN_PIPELINE_RUNTIME_SECONDS" in globals():
+                print("Main pipeline time:", fmt_duration(MAIN_PIPELINE_RUNTIME_SECONDS), f"({MAIN_PIPELINE_RUNTIME_SECONDS:.2f}s)")
+            print("HTML + zip packaging time:", fmt_duration(ZIP_RUNTIME_SECONDS), f"({ZIP_RUNTIME_SECONDS:.2f}s)")
+            if AUDIO_DURATION_SECONDS:
+                print("Wall-time / audio-duration ratio:", f"{AUDIO_JOB_RUNTIME_SECONDS / AUDIO_DURATION_SECONDS:.3f}x")
+            print("Timing is printed in the notebook only; it is not written into run_full JSON/data files.")
             display(FileLink(str(zip_path)))
             display(FileLink(str(Path(RUN_DIR) / "index.html")))
             display(FileLink("/kaggle/working/run_viewer/index.html"))
