@@ -62,6 +62,7 @@ from utils.tool import (
 from utils.logger import Logger, time_logger
 from models import separate_fast, dnsmos, whisper_asr, silero_vad, vietnamese_asr
 from utils.asr_quality import choose_asr_text
+from utils.trace_artifacts import TraceRunWriter
 import time
 import datetime
 from panns_inference import AudioTagging
@@ -2569,6 +2570,11 @@ def main_process(audio_path, save_path=None, audio_name=None,
             + f"-merge_gap-{args.merge_gap}" +f"-seg_th-{args.seg_th}"+ f"-cl_min-{args.min_cluster_size}" +f"-cl-th-{args.clust_th}"+ f"-LLM-{LLM}", audio_name
         )
         os.makedirs(save_path, exist_ok=True)
+        trace_writer = TraceRunWriter(
+            getattr(args, "trace_run_dir", ""),
+            source_audio_path=audio_path,
+            logger=logger,
+        )
         logger.debug(
             f"Processing audio: {audio_name}, from {audio_path}, save to: {save_path}"
         )
@@ -2630,6 +2636,18 @@ def main_process(audio_path, save_path=None, audio_name=None,
         segment_list = ori_list
         segment_list = split_long_segments(segment_list)
         ######################
+        trace_writer.write_diarization(
+            segment_list,
+            metadata={
+                "audio_path": audio_path,
+                "audio_duration_seconds": audio_duration,
+                "sample_rate": audio["sample_rate"],
+                "processing_time_seconds": vad_sortformer_processing_time,
+                "rt_factor": vad_sortformer_rt,
+                "merge_gap_seconds": args.merge_gap,
+                "speaker_link_threshold": speaker_link_threshold,
+            },
+        )
 
         # [Fixed] Execute Step 3 before Step 2.5!
         # Step 3: Background Music Detection and Removal
@@ -2637,11 +2655,22 @@ def main_process(audio_path, save_path=None, audio_name=None,
         logger.info("Step 3: Background Music Detection and Removal")
         # Add padding to cover ASR timestamp error margin
         audio, segment_demucs_flags = preprocess_segments_with_demucs(segment_list, audio, panns_model=panns_model, use_demucs=use_demucs, padding=0.5)
+        trace_writer.write_music_clean(
+            segment_list,
+            segment_demucs_flags,
+            audio,
+            metadata={
+                "enabled": bool(use_demucs),
+                "demucs_applied_count": int(sum(bool(flag) for flag in segment_demucs_flags)),
+                "total_segments": len(segment_list),
+            },
+        )
 
         # [Fixed] Now run SepReformer with the cleaned audio
         # Step 2.5: Overlap control using SepReformer
         logger.info("Step 2.5: Overlap Control with SepReformer")
         separation_time = 0.0
+        separation_rt = 0.0
         if use_sepreformer and sepreformer_separator is not None and embedding_model is not None:
             separation_start = time.time()
             # At this point, audio has already been processed by Demucs.
@@ -2660,6 +2689,19 @@ def main_process(audio_path, save_path=None, audio_name=None,
             logger.info(f"SepReformer separation - Processing time: {separation_time:.2f}s, RT factor: {separation_rt:.4f}")
         else:
             logger.info("SepReformer overlap separation skipped (flag disabled)")
+        trace_writer.write_overlap(
+            segment_list,
+            audio,
+            metadata={
+                "enabled": bool(use_sepreformer),
+                "separator_available": sepreformer_separator is not None,
+                "embedding_model_available": embedding_model is not None,
+                "processing_time_seconds": separation_time,
+                "rt_factor": separation_rt,
+                "overlap_threshold_seconds": overlap_threshold,
+                "separated_segments": int(sum(bool(seg.get("is_separated")) or bool(seg.get("sepreformer")) for seg in segment_list)),
+            },
+        )
             
         logger.info("Step 4: ASR (Automatic Speech Recognition)")
         if args.ASRMoE:
@@ -2700,6 +2742,19 @@ def main_process(audio_path, save_path=None, audio_name=None,
 
         # Calculate WhisperX alignment RT factor
         alignment_rt = alignment_time / audio_duration if audio_duration > 0 else 0
+        trace_writer.write_asr(
+            asr_result,
+            metadata={
+                "asr_moe_enabled": bool(args.ASRMoE),
+                "whisper_arch": args.whisper_arch,
+                "compute_type": args.compute_type,
+                "processing_time_seconds": asr_time,
+                "whisper_rt_factor": whisper_rt,
+                "alignment_time_seconds": alignment_time,
+                "alignment_rt_factor": alignment_rt,
+                "quality_guard_enabled": bool(args.asr_quality_guard),
+            },
+        )
 
         if LLM == "case_0":
             print("LLM case_0")
@@ -2849,6 +2904,11 @@ def main_process(audio_path, save_path=None, audio_name=None,
         final_path = os.path.join(save_path, audio_name + ".json")
         with open(final_path, "w", encoding="utf-8") as f:
             json.dump(output_data, f, ensure_ascii=False, indent=2)
+        trace_writer.write_export(
+            output_data,
+            source_segments_dir=os.path.join(save_path, audio_name),
+            source_json_path=final_path,
+        )
 
         logger.info(f"All done, Saved to: {final_path}")
         print(f"Processing complete! Results saved to: {final_path}")
@@ -2869,6 +2929,13 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--config_path", type=str, default="config.json", help="config path"
+    )
+    parser.add_argument(
+        "--trace_run_dir",
+        "--trace-run-dir",
+        type=str,
+        default="",
+        help="Optional run_full directory for true per-stage JSON/WAV artifacts.",
     )
     
     parser.add_argument("--batch_size", type=int, default=64, help="batch size")
