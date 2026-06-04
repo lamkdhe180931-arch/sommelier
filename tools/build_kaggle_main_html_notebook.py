@@ -52,11 +52,14 @@ def main() -> None:
             """
             ## 0. Cấu hình run
 
-            Chỉnh các biến này trước khi chạy nếu muốn đổi branch, giới hạn audio hoặc tắt bước nặng.
+            Chỉnh các biến toàn cục này trước khi chạy. Notebook sẽ dùng các biến này để clone branch, chọn audio, chọn GPU hiển thị cho pipeline, bật/tắt model nặng và truyền tham số vào `main_original_ASR_MoE.py`.
             """
         ),
         code(
             """
+            # =========================
+            # 0. Repo/output controls
+            # =========================
             REPO_URL = "https://github.com/lamkdhe180931-arch/sommelier.git"
             BRANCH = "codex/kaggle-main-html-viewer"
 
@@ -73,9 +76,35 @@ def main() -> None:
             LOG_DIR_PATH = f"{RUN_DIR}/logs"
             AUDIO_WAV = f"{INPUT_DIR}/full.wav"
 
+            # =========================
+            # 1. Audio input controls
+            # =========================
+            # Để "" nếu muốn notebook tự tìm audio đầu tiên trong /kaggle/input.
+            # Nếu muốn chỉ định rõ file, ví dụ:
+            # AUDIO_INPUT_PATH = "/kaggle/input/my-dataset/audio.mp3"
+            AUDIO_INPUT_PATH = ""
+            AUDIO_INPUT_EXTENSIONS = (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus")
+
             # None để chạy full audio. Ví dụ 300 để test nhanh 5 phút.
             AUDIO_LIMIT_SECONDS = 300
 
+            # =========================
+            # 2. GPU/runtime controls
+            # =========================
+            # Main branch hiện CHƯA chia GPU theo từng model.
+            # Nó chọn torch.device("cuda"), tức là cuda:0 trong danh sách GPU visible.
+            # "0"   -> toàn bộ model PyTorch chạy trên Kaggle GPU 0.
+            # "1"   -> toàn bộ model PyTorch chạy trên Kaggle GPU 1, nhưng bên trong code vẫn thấy là cuda:0.
+            # "0,1" -> cả 2 GPU visible, nhưng main vẫn chủ yếu dùng cuda:0.
+            # None  -> giữ nguyên môi trường Kaggle.
+            CUDA_VISIBLE_DEVICES = "0"
+            PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
+            PRINT_NVIDIA_SMI = True
+            REQUIRE_GPU = True
+
+            # =========================
+            # 3. Install/model switches
+            # =========================
             INSTALL_DEPENDENCIES = True
             RUN_DEMUCS = True
             RUN_SEPREFORMER = True
@@ -83,17 +112,38 @@ def main() -> None:
             WHISPERX_WORD_TIMESTAMPS = False
             QWEN3OMNI = False
 
+            # =========================
+            # 4. Main pipeline params
+            # =========================
             LLM_CASE = "case_2"
             WHISPER_ARCH = "large-v3"
             COMPUTE_TYPE = "float16"
             ASR_THREADS = 4
+            BATCH_SIZE = 64
+            INIT_PROMPT = True
+            DIA3 = False
+            KOREAN_G2P = False
+
+            # Diarization / clustering.
             MERGE_GAP = 2.0
             SPEAKER_LINK_THRESHOLD = 0.75
+            DIAR_SEGMENTATION_THRESHOLD = 0.15
+            DIAR_MIN_CLUSTER_SIZE = 10
+            DIAR_CLUSTER_THRESHOLD = 0.5
+
+            # Overlap / Sortformer boundary tuning.
             OVERLAP_THRESHOLD = 1.0
             SORTFORMER_PARAM = True
             SORTFORMER_PAD_ONSET = 0.05
             SORTFORMER_PAD_OFFSET = 0.05
 
+            # Opus/Ogg pre-decode controls.
+            OPUS_DECODE_WORKERS = 8
+            FFMPEG_THREADS_PER_DECODE = 1
+
+            # =========================
+            # 5. Secrets
+            # =========================
             HF_SECRET_NAME = "HF_TOKEN"
             """
         ),
@@ -112,6 +162,32 @@ def main() -> None:
                 EXPORT_DIR, FINAL_DIR, EVAL_DIR, PREVIEW_DIR, LOG_DIR_PATH,
             ]:
                 Path(_dir).mkdir(parents=True, exist_ok=True)
+
+            if CUDA_VISIBLE_DEVICES is not None:
+                os.environ["CUDA_VISIBLE_DEVICES"] = str(CUDA_VISIBLE_DEVICES)
+            if PYTORCH_CUDA_ALLOC_CONF:
+                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = str(PYTORCH_CUDA_ALLOC_CONF)
+
+            print("Runtime GPU controls:")
+            print("  CUDA_VISIBLE_DEVICES =", os.environ.get("CUDA_VISIBLE_DEVICES", "<not set>"))
+            print("  PYTORCH_CUDA_ALLOC_CONF =", os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "<not set>"))
+            print("  Main branch device rule: all PyTorch models use cuda:0 within visible GPUs.")
+            print("Feature switches:")
+            print("  INSTALL_DEPENDENCIES =", INSTALL_DEPENDENCIES)
+            print("  RUN_DEMUCS =", RUN_DEMUCS)
+            print("  RUN_SEPREFORMER =", RUN_SEPREFORMER)
+            print("  ASR_MOE =", ASR_MOE)
+            print("  WHISPERX_WORD_TIMESTAMPS =", WHISPERX_WORD_TIMESTAMPS)
+            print("  QWEN3OMNI =", QWEN3OMNI)
+            print("Main pipeline params:")
+            print("  AUDIO_INPUT_PATH =", AUDIO_INPUT_PATH or "<auto /kaggle/input>")
+            print("  AUDIO_LIMIT_SECONDS =", AUDIO_LIMIT_SECONDS)
+            print("  WHISPER_ARCH =", WHISPER_ARCH)
+            print("  COMPUTE_TYPE =", COMPUTE_TYPE)
+            print("  BATCH_SIZE =", BATCH_SIZE)
+            print("  ASR_THREADS =", ASR_THREADS)
+            print("  MERGE_GAP =", MERGE_GAP)
+            print("  SPEAKER_LINK_THRESHOLD =", SPEAKER_LINK_THRESHOLD)
 
             AUDIO_TIMING = {}
 
@@ -241,7 +317,11 @@ def main() -> None:
 
             print("CUDA:", torch.cuda.is_available())
             print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)
-            subprocess.run(["nvidia-smi"], check=False)
+            print("Visible CUDA device count:", torch.cuda.device_count() if torch.cuda.is_available() else 0)
+            if REQUIRE_GPU and not torch.cuda.is_available():
+                raise RuntimeError("REQUIRE_GPU=True nhưng torch.cuda.is_available() = False. Hãy bật Kaggle GPU hoặc đặt REQUIRE_GPU=False.")
+            if PRINT_NVIDIA_SMI:
+                subprocess.run(["nvidia-smi"], check=False)
             """
         ),
         md("## 4. Gắn Hugging Face token vào config"),
@@ -275,16 +355,22 @@ def main() -> None:
             print("Audio timing start:", AUDIO_TIMING["audio_job_start_clock"])
             print("Measured from:", AUDIO_TIMING["audio_job_start_label"])
 
-            audio_exts = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus"}
-            audio_candidates = sorted(
-                p for p in Path("/kaggle/input").rglob("*")
-                if p.is_file() and p.suffix.lower() in audio_exts
-            )
+            if AUDIO_INPUT_PATH:
+                audio_path = Path(AUDIO_INPUT_PATH)
+                if not audio_path.exists():
+                    raise FileNotFoundError(f"AUDIO_INPUT_PATH không tồn tại: {audio_path}")
+                if audio_path.suffix.lower() not in AUDIO_INPUT_EXTENSIONS:
+                    raise ValueError(f"AUDIO_INPUT_PATH không phải định dạng audio được hỗ trợ: {audio_path}")
+                AUDIO_IN = str(audio_path)
+            else:
+                audio_candidates = sorted(
+                    p for p in Path("/kaggle/input").rglob("*")
+                    if p.is_file() and p.suffix.lower() in AUDIO_INPUT_EXTENSIONS
+                )
+                if not audio_candidates:
+                    raise FileNotFoundError("Không tìm thấy audio trong /kaggle/input. Hãy Add Input hoặc Upload audio trước.")
+                AUDIO_IN = str(audio_candidates[0])
 
-            if not audio_candidates:
-                raise FileNotFoundError("Không tìm thấy audio trong /kaggle/input. Hãy Add Input hoặc Upload audio trước.")
-
-            AUDIO_IN = str(audio_candidates[0])
             print("AUDIO_IN:", AUDIO_IN)
             print("AUDIO_WAV:", AUDIO_WAV)
             print("RUN_DIR:", RUN_DIR)
@@ -377,13 +463,22 @@ def main() -> None:
                 "python", "main_original_ASR_MoE.py",
                 "--input_folder_path", INPUT_DIR,
                 "--config_path", "config.json",
+                "--batch_size", str(BATCH_SIZE),
                 "--LLM", LLM_CASE,
                 "--merge_gap", str(MERGE_GAP),
                 "--speaker-link-threshold", str(SPEAKER_LINK_THRESHOLD),
+                "--seg_th", str(DIAR_SEGMENTATION_THRESHOLD),
+                "--min_cluster_size", str(DIAR_MIN_CLUSTER_SIZE),
+                "--clust_th", str(DIAR_CLUSTER_THRESHOLD),
                 "--whisper_arch", WHISPER_ARCH,
                 "--compute_type", COMPUTE_TYPE,
                 "--threads", str(ASR_THREADS),
                 "--overlap_threshold", str(OVERLAP_THRESHOLD),
+                "--opus_decode_workers", str(OPUS_DECODE_WORKERS),
+                "--ffmpeg_threads_per_decode", str(FFMPEG_THREADS_PER_DECODE),
+                "--initprompt" if INIT_PROMPT else "--no-initprompt",
+                "--dia3" if DIA3 else "--no-dia3",
+                "--korean" if KOREAN_G2P else "--no-korean",
                 "--demucs" if RUN_DEMUCS else "--no-demucs",
                 "--sepreformer" if RUN_SEPREFORMER else "--no-sepreformer",
                 "--ASRMoE" if ASR_MOE else "--no-ASRMoE",

@@ -3067,7 +3067,7 @@ if __name__ == "__main__":
             asr_options_dict["word_timestamps"] = True
 
         asr_model = whisper_asr.load_asr_model(
-            "large-v3",
+            args.whisper_arch,
             device_name,
             compute_type=args.compute_type,
             threads=args.threads,
@@ -3084,7 +3084,7 @@ if __name__ == "__main__":
             asr_options_dict["word_timestamps"] = True
 
         asr_model = whisper_asr.load_asr_model(
-            "large-v3",
+            args.whisper_arch,
             device_name,
             compute_type=args.compute_type,
             threads=args.threads,
