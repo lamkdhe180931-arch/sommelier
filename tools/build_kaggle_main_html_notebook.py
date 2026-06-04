@@ -91,16 +91,23 @@ def main() -> None:
             # =========================
             # 2. GPU/runtime controls
             # =========================
-            # Main branch hiện CHƯA chia GPU theo từng model.
-            # Nó chọn torch.device("cuda"), tức là cuda:0 trong danh sách GPU visible.
-            # "0"   -> toàn bộ model PyTorch chạy trên Kaggle GPU 0.
-            # "1"   -> toàn bộ model PyTorch chạy trên Kaggle GPU 1, nhưng bên trong code vẫn thấy là cuda:0.
-            # "0,1" -> cả 2 GPU visible, nhưng main vẫn chủ yếu dùng cuda:0.
-            # None  -> giữ nguyên môi trường Kaggle.
-            CUDA_VISIBLE_DEVICES = "0"
+            # Kaggle 2x T4: giữ cả 2 GPU visible rồi chọn GPU cho từng model bằng *_DEVICE_INDEX.
+            # DEVICE_INDEX là index trong danh sách visible của Kaggle: 0 hoặc 1. Dùng -1 để ép CPU.
+            CUDA_VISIBLE_DEVICES = "0,1"
             PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
             PRINT_NVIDIA_SMI = True
             REQUIRE_GPU = True
+
+            # Gợi ý mặc định cho 2x T4:
+            # - GPU 0: diarization + Sortformer + Whisper large-v3
+            # - GPU 1: Demucs + PANNs + SepReformer + ASR-MoE nếu bật
+            DIAR_DEVICE_INDEX = 0
+            SORTFORMER_DEVICE_INDEX = 0
+            WHISPER_DEVICE_INDEX = 0
+            ASR_MOE_DEVICE_INDEX = 1
+            PANNS_DEVICE_INDEX = 1
+            DEMUCS_DEVICE_INDEX = 1
+            SEPREFORMER_DEVICE_INDEX = 1
 
             # =========================
             # 3. Install/model switches
@@ -171,7 +178,18 @@ def main() -> None:
             print("Runtime GPU controls:")
             print("  CUDA_VISIBLE_DEVICES =", os.environ.get("CUDA_VISIBLE_DEVICES", "<not set>"))
             print("  PYTORCH_CUDA_ALLOC_CONF =", os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "<not set>"))
-            print("  Main branch device rule: all PyTorch models use cuda:0 within visible GPUs.")
+            DEVICE_ASSIGNMENTS = {
+                "diar/vad/speaker-link": DIAR_DEVICE_INDEX,
+                "sortformer": SORTFORMER_DEVICE_INDEX,
+                "whisper": WHISPER_DEVICE_INDEX,
+                "asr_moe_parakeet_canary": ASR_MOE_DEVICE_INDEX,
+                "panns": PANNS_DEVICE_INDEX,
+                "demucs": DEMUCS_DEVICE_INDEX,
+                "sepreformer": SEPREFORMER_DEVICE_INDEX,
+            }
+            print("  GPU assignment (-1 = CPU, otherwise visible CUDA index):")
+            for name, idx in DEVICE_ASSIGNMENTS.items():
+                print(f"    - {name}: {idx}")
             print("Feature switches:")
             print("  INSTALL_DEPENDENCIES =", INSTALL_DEPENDENCIES)
             print("  RUN_DEMUCS =", RUN_DEMUCS)
@@ -316,8 +334,20 @@ def main() -> None:
                     print(pkg + ":", "missing", exc)
 
             print("CUDA:", torch.cuda.is_available())
-            print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)
-            print("Visible CUDA device count:", torch.cuda.device_count() if torch.cuda.is_available() else 0)
+            visible_gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
+            print("Visible CUDA device count:", visible_gpu_count)
+            if torch.cuda.is_available():
+                for i in range(visible_gpu_count):
+                    print(f"GPU {i}:", torch.cuda.get_device_name(i))
+                invalid_assignments = {
+                    name: idx for name, idx in DEVICE_ASSIGNMENTS.items()
+                    if idx is not None and idx >= visible_gpu_count
+                }
+                if invalid_assignments:
+                    raise ValueError(
+                        "GPU index không hợp lệ. Kaggle chỉ thấy "
+                        f"{visible_gpu_count} GPU: {invalid_assignments}"
+                    )
             if REQUIRE_GPU and not torch.cuda.is_available():
                 raise RuntimeError("REQUIRE_GPU=True nhưng torch.cuda.is_available() = False. Hãy bật Kaggle GPU hoặc đặt REQUIRE_GPU=False.")
             if PRINT_NVIDIA_SMI:
@@ -476,6 +506,13 @@ def main() -> None:
                 "--overlap_threshold", str(OVERLAP_THRESHOLD),
                 "--opus_decode_workers", str(OPUS_DECODE_WORKERS),
                 "--ffmpeg_threads_per_decode", str(FFMPEG_THREADS_PER_DECODE),
+                "--diar_device_index", str(DIAR_DEVICE_INDEX),
+                "--sortformer_device_index", str(SORTFORMER_DEVICE_INDEX),
+                "--whisper_device_index", str(WHISPER_DEVICE_INDEX),
+                "--asr_moe_device_index", str(ASR_MOE_DEVICE_INDEX),
+                "--panns_device_index", str(PANNS_DEVICE_INDEX),
+                "--demucs_device_index", str(DEMUCS_DEVICE_INDEX),
+                "--sepreformer_device_index", str(SEPREFORMER_DEVICE_INDEX),
                 "--initprompt" if INIT_PROMPT else "--no-initprompt",
                 "--dia3" if DIA3 else "--no-dia3",
                 "--korean" if KOREAN_G2P else "--no-korean",

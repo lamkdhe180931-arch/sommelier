@@ -81,6 +81,43 @@ from itertools import zip_longest
 warnings.filterwarnings("ignore")
 
 
+def _device_name_from_index(device_index: int) -> str:
+    if not torch.cuda.is_available():
+        return "cpu"
+    if device_index < 0:
+        return "cpu"
+    device_count = torch.cuda.device_count()
+    if device_index >= device_count:
+        raise ValueError(
+            f"CUDA device index {device_index} is not available. "
+            f"Visible CUDA device count: {device_count}."
+        )
+    return f"cuda:{device_index}"
+
+
+def _torch_device_from_index(device_index: int) -> torch.device:
+    return torch.device(_device_name_from_index(device_index))
+
+
+def _whisper_device_from_index(device_index: int) -> tuple[str, int]:
+    if not torch.cuda.is_available() or device_index < 0:
+        return "cpu", 0
+    device_count = torch.cuda.device_count()
+    if device_index >= device_count:
+        raise ValueError(
+            f"Whisper CUDA device index {device_index} is not available. "
+            f"Visible CUDA device count: {device_count}."
+        )
+    return "cuda", device_index
+
+
+def _model_device(model, fallback_device: torch.device) -> torch.device:
+    try:
+        return next(model.parameters()).device
+    except Exception:
+        return fallback_device
+
+
 def _apply_sortformer_segment_padding_from_args(
     df: pd.DataFrame, args, logger, audio_duration: float | None = None
 ) -> pd.DataFrame:
@@ -682,7 +719,10 @@ def separate_full_vocals_demucs(full_audio: np.ndarray, sample_rate: int) -> np.
         import subprocess
         demucs_output_dir = os.path.join(temp_dir, "separated")
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = globals().get(
+            "demucs_device_name",
+            "cuda" if torch.cuda.is_available() else "cpu",
+        )
         logger.info(f"Running single Demucs pass on device: {device}")
 
         cmd = [
@@ -761,8 +801,10 @@ def remove_segment_background_music_demucs(segment_audio, sample_rate, full_voca
         import subprocess
         demucs_output_dir = os.path.join(temp_dir, "separated")
 
-        # Check if CUDA is available
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = globals().get(
+            "demucs_device_name",
+            "cuda" if torch.cuda.is_available() else "cpu",
+        )
         logger.debug(f"Running Demucs on device: {device}")
 
         cmd = [
@@ -1216,8 +1258,8 @@ def identify_speaker_with_embedding(audio_segment, sample_rate, reference_embedd
         )
         return speaker_labels[0] if speaker_labels else None
 
-    # Convert to tensor
-    audio_tensor = torch.tensor(audio_16k, dtype=torch.float32).unsqueeze(0).to(device)
+    embedding_device = _model_device(embedding_model, device)
+    audio_tensor = torch.tensor(audio_16k, dtype=torch.float32).unsqueeze(0).to(embedding_device)
 
     # Extract embedding (guard against short/invalid audio)
     try:
@@ -1350,7 +1392,8 @@ def process_overlapping_segments_with_separation(segment_list, audio, overlap_th
                     )
                     continue
 
-                seg_tensor = torch.tensor(seg_audio_16k, dtype=torch.float32).unsqueeze(0).to(device)
+                embedding_device = _model_device(embedding_model, device)
+                seg_tensor = torch.tensor(seg_audio_16k, dtype=torch.float32).unsqueeze(0).to(embedding_device)
                 try:
                     with torch.inference_mode():
                         embedding = embedding_model(seg_tensor)
@@ -2624,7 +2667,7 @@ def main_process(audio_path, save_path=None, audio_name=None,
                 audio,
                 segment_demucs_flags=segment_demucs_flags,
                 enable_word_timestamps=args.whisperx_word_timestamps,
-                device=device_name
+                device=whisper_device_name
             )
 
             asr_end = time.time()
@@ -2971,6 +3014,48 @@ if __name__ == "__main__":
         default=1,
         help="ffmpeg -threads per decode process (keep small when using many workers).",
     )
+    parser.add_argument(
+        "--diar_device_index",
+        type=int,
+        default=0,
+        help="Visible CUDA device index for pyannote diarization, VAD, and speaker linking. Use -1 for CPU.",
+    )
+    parser.add_argument(
+        "--sortformer_device_index",
+        type=int,
+        default=0,
+        help="Visible CUDA device index for NeMo Sortformer diarization. Use -1 for CPU.",
+    )
+    parser.add_argument(
+        "--whisper_device_index",
+        type=int,
+        default=0,
+        help="Visible CUDA device index for faster-whisper. Use -1 for CPU.",
+    )
+    parser.add_argument(
+        "--asr_moe_device_index",
+        type=int,
+        default=1,
+        help="Visible CUDA device index for optional Parakeet/Canary ASR-MoE models. Use -1 for CPU.",
+    )
+    parser.add_argument(
+        "--panns_device_index",
+        type=int,
+        default=1,
+        help="Visible CUDA device index for PANNs music detection. Use -1 for CPU.",
+    )
+    parser.add_argument(
+        "--demucs_device_index",
+        type=int,
+        default=1,
+        help="Visible CUDA device index for Demucs source separation. Use -1 for CPU.",
+    )
+    parser.add_argument(
+        "--sepreformer_device_index",
+        type=int,
+        default=1,
+        help="Visible CUDA device index for SepReformer and its pyannote embedding model. Use -1 for CPU.",
+    )
 
     args = parser.parse_args()
 
@@ -2987,15 +3072,38 @@ if __name__ == "__main__":
 
     # Load models
     if detect_gpu():
-        logger.info("Using GPU")
-        device_name = "cuda"
-        device = torch.device(device_name)
+        logger.info(f"Using GPU. Visible CUDA device count: {torch.cuda.device_count()}")
     else:
         logger.info("Using CPU")
-        device_name = "cpu"
-        device = torch.device(device_name)
-        # whisperX expects compute type: int8
-        logger.info("Overriding the compute type to int8")
+
+    device = _torch_device_from_index(args.diar_device_index)
+    device_name = "cuda" if device.type == "cuda" else "cpu"
+    diar_device = device
+    sortformer_device = _torch_device_from_index(args.sortformer_device_index)
+    whisper_device_name, whisper_device_index = _whisper_device_from_index(args.whisper_device_index)
+    asr_moe_device = _torch_device_from_index(args.asr_moe_device_index) if args.ASRMoE else device
+    sepreformer_device = _torch_device_from_index(args.sepreformer_device_index) if args.sepreformer else device
+    panns_device_name = _device_name_from_index(args.panns_device_index) if args.demucs else device_name
+    demucs_device_name = _device_name_from_index(args.demucs_device_index) if args.demucs else device_name
+
+    whisper_device_label = (
+        f"{whisper_device_name}:{whisper_device_index}"
+        if whisper_device_name == "cuda"
+        else whisper_device_name
+    )
+    logger.info(
+        "Device map: "
+        f"diar/vad/speaker-link={diar_device}, "
+        f"sortformer={sortformer_device}, "
+        f"whisper={whisper_device_label}, "
+        f"asr_moe={asr_moe_device}, "
+        f"sepreformer={sepreformer_device}, "
+        f"panns={panns_device_name}, "
+        f"demucs={demucs_device_name}"
+    )
+
+    if whisper_device_name == "cpu" and args.compute_type != "int8":
+        logger.info("Overriding Whisper compute_type to int8 because Whisper is running on CPU")
         args.compute_type = "int8"
 
     check_env(logger)
@@ -3068,7 +3176,8 @@ if __name__ == "__main__":
 
         asr_model = whisper_asr.load_asr_model(
             args.whisper_arch,
-            device_name,
+            whisper_device_name,
+            device_index=whisper_device_index,
             compute_type=args.compute_type,
             threads=args.threads,
             language="en",
@@ -3085,7 +3194,8 @@ if __name__ == "__main__":
 
         asr_model = whisper_asr.load_asr_model(
             args.whisper_arch,
-            device_name,
+            whisper_device_name,
+            device_index=whisper_device_index,
             compute_type=args.compute_type,
             threads=args.threads,
 
@@ -3096,13 +3206,18 @@ if __name__ == "__main__":
     if args.ASRMoE:
         import nemo.collections.asr as nemo_asr
         asr_model_2 = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v2")
+        try:
+            asr_model_2 = asr_model_2.to(asr_moe_device)
+            logger.debug(f" * Parakeet model loaded on {asr_moe_device}")
+        except Exception as e:
+            logger.warning(f" * Could not move Parakeet model to {asr_moe_device}: {e}")
 
         # Load Canary model
         logger.debug(" * Loading Canary Model")
         canary_model = SALM.from_pretrained('nvidia/canary-qwen-2.5b')
-        canary_model = canary_model.to(device)
+        canary_model = canary_model.to(asr_moe_device)
         canary_model.eval()
-        logger.debug(f" * Canary model loaded on {device}")
+        logger.debug(f" * Canary model loaded on {asr_moe_device}")
         # Client initialization
     #client = OpenAI(api_key="YOUR_API_KEY")
     model_name = "gpt-4.1"
@@ -3131,7 +3246,9 @@ if __name__ == "__main__":
 
     # load model from Hugging Face model card directly (You need a Hugging Face token)
     diar_model = SortformerEncLabelModel.from_pretrained("nvidia/diar_sortformer_4spk-v1")
+    diar_model = diar_model.to(sortformer_device)
     diar_model.eval()
+    logger.debug(f" * Sortformer diarization model loaded on {sortformer_device}")
 
     # Initialize Pyannote embedding model (only when sepreformer is enabled)
     embedding_model = None
@@ -3140,8 +3257,8 @@ if __name__ == "__main__":
         try:
             from pyannote.audio import Model as PyannoteModel
             embedding_model = PyannoteModel.from_pretrained("pyannote/embedding", use_auth_token=cfg["huggingface_token"])
-            embedding_model = embedding_model.to(device)
-            logger.debug(" * Pyannote Embedding Model loaded successfully")
+            embedding_model = embedding_model.to(sepreformer_device)
+            logger.debug(f" * Pyannote Embedding Model loaded successfully on {sepreformer_device}")
         except Exception as e:
             logger.error(f" * Failed to load Pyannote Embedding Model: {e}")
             embedding_model = None
@@ -3153,7 +3270,7 @@ if __name__ == "__main__":
         try:
             sepreformer_separator = SepReformerSeparator(
                 sepreformer_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "SepReformer"),
-                device=device
+                device=sepreformer_device
             )
             logger.debug(" * SepReformer Separator loaded successfully")
         except Exception as e:
@@ -3169,8 +3286,8 @@ if __name__ == "__main__":
             os.makedirs(panns_data_dir, exist_ok=True)
             os.environ['PANNS_DATA'] = panns_data_dir
             checkpoint_path = os.path.join(panns_data_dir, 'Cnn14_mAP=0.431.pth')
-            panns_model = AudioTagging(checkpoint_path=checkpoint_path, device='cuda' if torch.cuda.is_available() else 'cpu')
-            logger.debug(" * PANNs Model loaded successfully")
+            panns_model = AudioTagging(checkpoint_path=checkpoint_path, device=panns_device_name)
+            logger.debug(f" * PANNs Model loaded successfully on {panns_device_name}")
         except Exception as e:
             logger.error(f" * Failed to load PANNs Model: {e}")
             panns_model = None
