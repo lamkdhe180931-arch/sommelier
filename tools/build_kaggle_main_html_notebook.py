@@ -114,6 +114,10 @@ def main() -> None:
             # 3. Install/model switches
             # =========================
             INSTALL_DEPENDENCIES = True
+            TORCH_PACKAGE = "torch==2.7.1"
+            TORCHAUDIO_PACKAGE = "torchaudio==2.7.1"
+            TORCHVISION_PACKAGE = "torchvision==0.22.1"
+            PYTORCH_WHEEL_EXTRA_INDEX_URL = "https://download.pytorch.org/whl/cu126"
             RUN_DEMUCS = True
             RUN_SEPREFORMER = True
             ASR_MOE = True
@@ -205,6 +209,10 @@ def main() -> None:
                 print(f"    - {name}: {idx}")
             print("Feature switches:")
             print("  INSTALL_DEPENDENCIES =", INSTALL_DEPENDENCIES)
+            print("  TORCH_PACKAGE =", TORCH_PACKAGE)
+            print("  TORCHAUDIO_PACKAGE =", TORCHAUDIO_PACKAGE)
+            print("  TORCHVISION_PACKAGE =", TORCHVISION_PACKAGE)
+            print("  PYTORCH_WHEEL_EXTRA_INDEX_URL =", PYTORCH_WHEEL_EXTRA_INDEX_URL)
             print("  RUN_DEMUCS =", RUN_DEMUCS)
             print("  RUN_SEPREFORMER =", RUN_SEPREFORMER)
             print("  ASR_MOE =", ASR_MOE)
@@ -327,12 +335,20 @@ def main() -> None:
                 run_logged(["python", "-m", "pip", "install", "lightning==2.4.0", "pytorch-lightning==2.5.2"], "07_pip_lightning.log", tail=12)
                 run_logged(["python", "-m", "pip", "install", "nemo-toolkit[asr]==2.4.0"], "08_pip_nemo_asr.log", tail=20)
 
-                run_logged(["python", "-m", "pip", "install", "pillow<12.0"], "09_pip_pillow.log", tail=8)
-                run_logged(["python", "-m", "pip", "install", "--no-cache-dir", "--force-reinstall", "--no-deps", "torchmetrics==1.7.4"], "10_pip_torchmetrics.log", tail=8)
+                torch_stack_cmd = [
+                    "python", "-m", "pip", "install", "--no-cache-dir", "--force-reinstall",
+                ]
+                if PYTORCH_WHEEL_EXTRA_INDEX_URL:
+                    torch_stack_cmd.extend(["--extra-index-url", PYTORCH_WHEEL_EXTRA_INDEX_URL])
+                torch_stack_cmd.extend([TORCH_PACKAGE, TORCHAUDIO_PACKAGE, TORCHVISION_PACKAGE])
+                run_logged(torch_stack_cmd, "09_pip_torch_stack.log", tail=24)
+
+                run_logged(["python", "-m", "pip", "install", "pillow<12.0"], "10_pip_pillow.log", tail=8)
+                run_logged(["python", "-m", "pip", "install", "--no-cache-dir", "--force-reinstall", "--no-deps", "torchmetrics==1.7.4"], "11_pip_torchmetrics.log", tail=8)
                 run_logged([
                     "python", "-m", "pip", "install", "--no-cache-dir", "--force-reinstall",
                     "numpy==2.2.6", "numba==0.61.2", "llvmlite==0.44.0",
-                ], "11_pip_numpy_numba.log", tail=12)
+                ], "12_pip_numpy_numba.log", tail=12)
             else:
                 print("INSTALL_DEPENDENCIES=False, bỏ qua cài dependencies.")
             """
@@ -341,15 +357,25 @@ def main() -> None:
         code(
             """
             import importlib.metadata as importlib_metadata
-            import numpy, numba, torch
+            import numpy, numba, torch, torchvision, torchaudio
 
-            for pkg in ["nemo-toolkit", "chunkformer", "transformers", "numpy", "numba", "torch"]:
+            for pkg in ["nemo-toolkit", "chunkformer", "transformers", "numpy", "numba", "torch", "torchvision", "torchaudio"]:
                 try:
-                    version = importlib_metadata.version(pkg) if pkg != "numpy" else numpy.__version__
+                    if pkg == "numpy":
+                        version = numpy.__version__
+                    elif pkg == "torch":
+                        version = torch.__version__
+                    elif pkg == "torchvision":
+                        version = torchvision.__version__
+                    elif pkg == "torchaudio":
+                        version = torchaudio.__version__
+                    else:
+                        version = importlib_metadata.version(pkg)
                     print(pkg + ":", version)
                 except Exception as exc:
                     print(pkg + ":", "missing", exc)
 
+            print("Torch stack:", torch.__version__, torchvision.__version__, torchaudio.__version__)
             print("CUDA:", torch.cuda.is_available())
             visible_gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
             print("Visible CUDA device count:", visible_gpu_count)
