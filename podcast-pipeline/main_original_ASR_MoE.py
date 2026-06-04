@@ -60,14 +60,14 @@ from utils.tool import (
     calculate_audio_stats,
 )
 from utils.logger import Logger, time_logger
-from models import separate_fast, dnsmos, whisper_asr, silero_vad
+from models import separate_fast, dnsmos, whisper_asr, silero_vad, vietnamese_asr
+from utils.asr_quality import choose_asr_text
 import time
 import datetime
 from panns_inference import AudioTagging
 import soundfile as sf
 
 from nemo.collections.asr.models import SortformerEncLabelModel
-from nemo.collections.speechlm2.models import SALM
 
 import json
 import re
@@ -288,7 +288,7 @@ class RoverEnsembler:
         - Similarity-based outlier downweighting
 
         Args:
-            transcripts: List of transcription results from ASR models (e.g., [whisper, canary, parakeet])
+            transcripts: List of transcription results from ASR models (e.g., [whisper, phowhisper, chunkformer])
 
         Returns:
             Final ensembled transcription result
@@ -1543,7 +1543,7 @@ def asr(vad_segments, audio):
             # Language detection (can be done per segment or fixed to 'en')
             # Default to 'en' following existing flow; use detect_language if needed
             # language, prob = asr_model.detect_language(segment_audio_16k)
-            language = "en"
+            language = getattr(args, "asr_language", "vi")
 
             transcribe_result = asr_model.transcribe(
                 segment_audio_16k,
@@ -1588,10 +1588,22 @@ def asr(vad_segments, audio):
 import concurrent.futures
 
 @time_logger
-def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestamps=False, device="cuda"):
+def asr_MoE(
+    vad_segments,
+    audio,
+    segment_demucs_flags=None,
+    enable_word_timestamps=False,
+    device="cuda",
+    asr_quality_guard=True,
+    asr_micro_segment_seconds=0.5,
+    asr_short_segment_seconds=1.0,
+    asr_vi_agreement_threshold=0.75,
+    asr_context_pad_before=0.0,
+    asr_context_pad_after=0.0,
+):
     """
-    Perform Automatic Speech Recognition (ASR) on the VAD segments using MoE with Parallel Execution.
-    [Updated] Runs Whisper, Parakeet, and Canary in parallel using ThreadPoolExecutor.
+    Run three Vietnamese ASR models per segment: Whisper, PhoWhisper, and
+    ChunkFormer CTC, then vote the final text with ROVER.
     """
     if len(vad_segments) == 0:
         return [], 0.0, 0.0
@@ -1599,162 +1611,153 @@ def asr_MoE(vad_segments, audio, segment_demucs_flags=None, enable_word_timestam
     if segment_demucs_flags is None:
         segment_demucs_flags = [False] * len(vad_segments)
 
-    # Full audio (for fallback)
     full_waveform = audio["waveform"]
     global_sample_rate = audio["sample_rate"]
 
     final_results = []
     total_whisper_time = 0.0
     total_alignment_time = 0.0
-    
-    rover = RoverEnsembler()
 
-    # --- Helper Functions for Parallel Execution ---
+    rover = RoverEnsembler()
+    phowhisper_transcriber = globals().get("phowhisper_model")
+    chunkformer_transcriber = globals().get("chunkformer_model")
+    asr_language = getattr(args, "asr_language", "vi")
+
+    def slice_full_audio(start_sec, end_sec):
+        start_frame = max(0, int(round(float(start_sec) * global_sample_rate)))
+        end_frame = min(len(full_waveform), int(round(float(end_sec) * global_sample_rate)))
+        if end_frame <= start_frame:
+            return np.zeros(0, dtype=np.float32)
+        return full_waveform[start_frame:end_frame]
+
     def run_whisper_task(segment_audio_16k, dummy_vad):
         w_start = time.time()
         try:
             transcribe_result = asr_model.transcribe(
-                segment_audio_16k, 
-                dummy_vad, 
-                batch_size=1, 
-                print_progress=False
+                segment_audio_16k,
+                dummy_vad,
+                batch_size=1,
+                language=asr_language,
+                print_progress=False,
             )
-            
+
             text_whisper = ""
-            detected_language = "en"
+            detected_language = asr_language
             words = []
 
             if transcribe_result and "segments" in transcribe_result and len(transcribe_result["segments"]) > 0:
                 text_whisper = " ".join([s["text"] for s in transcribe_result["segments"]]).strip()
-                detected_language = transcribe_result.get("language", "en")
+                detected_language = transcribe_result.get("language", asr_language)
                 if enable_word_timestamps:
                     for s in transcribe_result["segments"]:
-                        if "words" in s: words.extend(s["words"])
-            
+                        if "words" in s:
+                            words.extend(s["words"])
+
             w_end = time.time()
             return {
                 "text": text_whisper,
                 "language": detected_language,
                 "words": words,
-                "time": w_end - w_start
+                "time": w_end - w_start,
             }
         except Exception as e:
             logger.error(f"Whisper failed: {e}")
-            return {"text": "", "language": "en", "words": [], "time": 0.0}
+            return {"text": "", "language": asr_language, "words": [], "time": 0.0}
 
-    def run_parakeet_task(segment_audio_16k):
+    def run_phowhisper_task(segment_audio_16k):
         try:
-            # Parakeet input requires list
-            p_res = asr_model_2.transcribe([segment_audio_16k])
-            
-            text_parakeet = ""
-            if p_res:
-                first_result = p_res[0]
-                if isinstance(first_result, str):
-                    text_parakeet = first_result
-                elif hasattr(first_result, 'text'):
-                    text_parakeet = first_result.text
-                else:
-                    text_parakeet = str(first_result)
-            return text_parakeet
+            return vietnamese_asr.transcribe(phowhisper_transcriber, segment_audio_16k)
         except Exception as e:
-            logger.error(f"Parakeet failed: {e}")
+            logger.error(f"PhoWhisper failed: {e}")
             return ""
 
-    def run_canary_task(segment_audio_16k):
+    def run_chunkformer_task(segment_audio_16k):
         try:
-            # Canary requires a file path usually, creating temp file safely inside thread
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_wav:
-                sf.write(temp_wav.name, segment_audio_16k, 16000)
-                # Ensure write is flushed
-                temp_wav.flush()
-                
-                answer_ids = canary_model.generate(
-                    prompts=[[{"role": "user", "content": f"Transcribe the following: {canary_model.audio_locator_tag}", "audio": [temp_wav.name]}]],
-                    max_new_tokens=128,
-                )
-                text_canary = canary_model.tokenizer.ids_to_text(answer_ids[0].cpu())
-                return text_canary
+            return vietnamese_asr.transcribe(chunkformer_transcriber, segment_audio_16k)
         except Exception as e:
-            logger.error(f"Canary failed: {e}")
+            logger.error(f"ChunkFormer CTC failed: {e}")
             return ""
-    # ---------------------------------------------
 
-    # Create a ThreadPoolExecutor
-    # max_workers=3 allows all three models to be attempted roughly at the same time.
-    # Note: Python GIL exists, but since these calls release GIL for C++/CUDA ops, it works for parallelization.
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-
         for idx, segment in enumerate(vad_segments):
             start_time = segment["start"]
             end_time = segment["end"]
             speaker = segment.get("speaker", "Unknown")
-            
-            # 1. Audio Selection Logic
-            segment_audio = None
             is_enhanced = False
+            segment_duration_sec = max(0.0, float(end_time) - float(start_time))
+            pad_before = max(0.0, float(asr_context_pad_before))
+            pad_after = max(0.0, float(asr_context_pad_after))
 
             if "enhanced_audio" in segment:
-                raw_audio = segment["enhanced_audio"]
+                prefix = slice_full_audio(start_time - pad_before, start_time) if pad_before else np.zeros(0, dtype=np.float32)
+                suffix = slice_full_audio(end_time, end_time + pad_after) if pad_after else np.zeros(0, dtype=np.float32)
+                enhanced_core = np.asarray(segment["enhanced_audio"], dtype=np.float32).reshape(-1)
+                raw_audio = np.concatenate([prefix, enhanced_core, suffix]).astype(np.float32)
                 is_enhanced = True
             else:
-                start_frame = int(start_time * global_sample_rate)
-                end_frame = int(end_time * global_sample_rate)
-                raw_audio = full_waveform[start_frame:end_frame]
-            
-            # 16kHz resampling
+                raw_audio = slice_full_audio(start_time - pad_before, end_time + pad_after)
+
             if global_sample_rate != 16000:
                 segment_audio_16k = librosa.resample(raw_audio, orig_sr=global_sample_rate, target_sr=16000)
             else:
                 segment_audio_16k = raw_audio
 
-            if len(segment_audio_16k) < 160: 
+            if len(segment_audio_16k) < 160:
                 continue
 
-            # Dummy VAD for Whisper
-            duration_sec = len(segment_audio_16k) / 16000
-            dummy_vad = [{"start": 0.0, "end": duration_sec}]
+            padded_duration_sec = len(segment_audio_16k) / 16000
+            dummy_vad = [{"start": 0.0, "end": padded_duration_sec}]
 
-            # ---------------------------------------------------------------------
-            # Submit Tasks in Parallel
-            # ---------------------------------------------------------------------
             future_whisper = executor.submit(run_whisper_task, segment_audio_16k, dummy_vad)
-            future_parakeet = executor.submit(run_parakeet_task, segment_audio_16k)
-            future_canary = executor.submit(run_canary_task, segment_audio_16k)
+            future_phowhisper = executor.submit(run_phowhisper_task, segment_audio_16k)
+            future_chunkformer = executor.submit(run_chunkformer_task, segment_audio_16k)
 
-            # ---------------------------------------------------------------------
-            # Wait for results (Barrier)
-            # ---------------------------------------------------------------------
-            # .result() blocks until the future is done
             whisper_res = future_whisper.result()
-            text_parakeet = future_parakeet.result()
-            text_canary = future_canary.result()
+            text_phowhisper = future_phowhisper.result()
+            text_chunkformer = future_chunkformer.result()
 
-            # Unpack Whisper results
             text_whisper = whisper_res["text"]
             detected_language = whisper_res["language"]
             words = whisper_res["words"]
             total_whisper_time += whisper_res["time"]
 
-            # ---------------------------------------------------------------------
-            # 5. Ensemble & Result Construction
-            # ---------------------------------------------------------------------
-            text_ensemble = rover.align_and_vote([text_whisper, text_canary, text_parakeet])
+            text_ensemble = rover.align_and_vote([text_whisper, text_phowhisper, text_chunkformer])
+            quality_decision = choose_asr_text(
+                rover_text=text_ensemble,
+                text_whisper=text_whisper,
+                text_phowhisper=text_phowhisper,
+                text_chunkformer=text_chunkformer,
+                duration_sec=segment_duration_sec,
+                enabled=asr_quality_guard,
+                micro_segment_seconds=asr_micro_segment_seconds,
+                short_segment_seconds=asr_short_segment_seconds,
+                vi_agreement_threshold=asr_vi_agreement_threshold,
+            )
+            text_ensemble = quality_decision["text"]
+            if quality_decision["actions"]:
+                logger.info(
+                    f"ASR quality guard segment {idx} ({start_time:.2f}-{end_time:.2f}s): "
+                    f"{quality_decision['actions']} -> {quality_decision['source']}"
+                )
 
             seg_result = {
                 "start": start_time,
                 "end": end_time,
                 "text": text_ensemble,
                 "text_whisper": text_whisper,
-                "text_parakeet": text_parakeet,
-                "text_canary": text_canary,
+                "text_phowhisper": text_phowhisper,
+                "text_chunkformer": text_chunkformer,
                 "speaker": speaker,
                 "language": detected_language,
                 "demucs": segment_demucs_flags[idx] if idx < len(segment_demucs_flags) else False,
-                "is_separated": is_enhanced, 
-                "sepreformer": segment.get("sepreformer", False)
+                "is_separated": is_enhanced,
+                "sepreformer": segment.get("sepreformer", False),
+                "asr_quality_source": quality_decision["source"],
+                "asr_quality_actions": quality_decision["actions"],
+                "asr_context_pad_before": pad_before,
+                "asr_context_pad_after": pad_after,
             }
-            
+
             if is_enhanced:
                 seg_result["enhanced_audio"] = raw_audio
 
@@ -2667,7 +2670,13 @@ def main_process(audio_path, save_path=None, audio_name=None,
                 audio,
                 segment_demucs_flags=segment_demucs_flags,
                 enable_word_timestamps=args.whisperx_word_timestamps,
-                device=whisper_device_name
+                device=whisper_device_name,
+                asr_quality_guard=args.asr_quality_guard,
+                asr_micro_segment_seconds=args.asr_micro_segment_seconds,
+                asr_short_segment_seconds=args.asr_short_segment_seconds,
+                asr_vi_agreement_threshold=args.asr_vi_agreement_threshold,
+                asr_context_pad_before=args.asr_context_pad_before,
+                asr_context_pad_after=args.asr_context_pad_after,
             )
 
             asr_end = time.time()
@@ -2790,6 +2799,20 @@ def main_process(audio_path, save_path=None, audio_name=None,
                 "whisper_large_v3": {
                     "processing_time_seconds": whisper_processing_time,
                     "rt_factor": whisper_rt
+                },
+                "asr_ensemble": {
+                    "enabled": args.ASRMoE,
+                    "models": (
+                        ["whisper", "phowhisper", "chunkformer_ctc"]
+                        if args.ASRMoE else ["whisper"]
+                    ),
+                    "asr_language": args.asr_language,
+                    "whisper_arch": args.whisper_arch,
+                    "phowhisper_model_name": args.phowhisper_model_name if args.ASRMoE else None,
+                    "ctc_model_name": args.ctc_model_name if args.ASRMoE else None,
+                    "quality_guard_enabled": args.asr_quality_guard,
+                    "context_pad_before": args.asr_context_pad_before,
+                    "context_pad_after": args.asr_context_pad_after,
                 },
                 # [Fixed] Use cleaned_list length instead of filtered_list
                 "total_segments": len(cleaned_list)
@@ -2944,7 +2967,7 @@ if __name__ == "__main__":
         "--ASRMoE",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="parakeet",
+        help="Enable ASR ensemble: Whisper + PhoWhisper + ChunkFormer CTC",
     )
 
     parser.add_argument(
@@ -3015,6 +3038,60 @@ if __name__ == "__main__":
         help="ffmpeg -threads per decode process (keep small when using many workers).",
     )
     parser.add_argument(
+        "--asr_language",
+        type=str,
+        default="vi",
+        help="Language code used by Whisper in ASR. Use 'vi' for Vietnamese.",
+    )
+    parser.add_argument(
+        "--phowhisper_model_name",
+        type=str,
+        default=vietnamese_asr.PHOWHISPER_MODEL_NAME,
+        help="PhoWhisper model id for ASR-MoE.",
+    )
+    parser.add_argument(
+        "--ctc_model_name",
+        type=str,
+        default=vietnamese_asr.CHUNKFORMER_MODEL_NAME,
+        help="ChunkFormer CTC model id for ASR-MoE.",
+    )
+    parser.add_argument(
+        "--asr_quality_guard",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable Vietnamese ASR quality guard for short/hallucinated segments.",
+    )
+    parser.add_argument(
+        "--asr_micro_segment_seconds",
+        type=float,
+        default=0.5,
+        help="Segments shorter than this get stricter ASR hallucination filtering.",
+    )
+    parser.add_argument(
+        "--asr_short_segment_seconds",
+        type=float,
+        default=1.0,
+        help="Short segment threshold used by ASR quality guard.",
+    )
+    parser.add_argument(
+        "--asr_vi_agreement_threshold",
+        type=float,
+        default=0.75,
+        help="PhoWhisper/CTC agreement threshold for Vietnamese consensus.",
+    )
+    parser.add_argument(
+        "--asr_context_pad_before",
+        type=float,
+        default=0.0,
+        help="Seconds of audio context to prepend before ASR inference; output timestamps remain unchanged.",
+    )
+    parser.add_argument(
+        "--asr_context_pad_after",
+        type=float,
+        default=0.0,
+        help="Seconds of audio context to append before ASR inference; output timestamps remain unchanged.",
+    )
+    parser.add_argument(
         "--diar_device_index",
         type=int,
         default=0,
@@ -3036,7 +3113,7 @@ if __name__ == "__main__":
         "--asr_moe_device_index",
         type=int,
         default=1,
-        help="Visible CUDA device index for optional Parakeet/Canary ASR-MoE models. Use -1 for CPU.",
+        help="Visible CUDA device index for optional PhoWhisper/ChunkFormer CTC ASR-MoE models. Use -1 for CPU.",
     )
     parser.add_argument(
         "--panns_device_index",
@@ -3180,7 +3257,7 @@ if __name__ == "__main__":
             device_index=whisper_device_index,
             compute_type=args.compute_type,
             threads=args.threads,
-            language="en",
+            language=args.asr_language,
 
         # ASR model options can be modified via default_asr_options in whisper_asr.py.
 
@@ -3199,25 +3276,24 @@ if __name__ == "__main__":
             compute_type=args.compute_type,
             threads=args.threads,
 
-            language="en",
+            language=args.asr_language,
             asr_options=asr_options_dict if asr_options_dict else None,
 
             )
     if args.ASRMoE:
-        import nemo.collections.asr as nemo_asr
-        asr_model_2 = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v2")
-        try:
-            asr_model_2 = asr_model_2.to(asr_moe_device)
-            logger.debug(f" * Parakeet model loaded on {asr_moe_device}")
-        except Exception as e:
-            logger.warning(f" * Could not move Parakeet model to {asr_moe_device}: {e}")
+        logger.debug(" * Loading PhoWhisper Model")
+        phowhisper_model = vietnamese_asr.load_phowhisper_model(
+            model_name=args.phowhisper_model_name,
+            device=asr_moe_device,
+        )
+        logger.debug(f" * PhoWhisper model loaded on {asr_moe_device}: {args.phowhisper_model_name}")
 
-        # Load Canary model
-        logger.debug(" * Loading Canary Model")
-        canary_model = SALM.from_pretrained('nvidia/canary-qwen-2.5b')
-        canary_model = canary_model.to(asr_moe_device)
-        canary_model.eval()
-        logger.debug(f" * Canary model loaded on {asr_moe_device}")
+        logger.debug(" * Loading ChunkFormer CTC Model")
+        chunkformer_model = vietnamese_asr.load_chunkformer_model(
+            model_name=args.ctc_model_name,
+            device=asr_moe_device,
+        )
+        logger.debug(f" * ChunkFormer CTC model loaded on {asr_moe_device}: {args.ctc_model_name}")
         # Client initialization
     #client = OpenAI(api_key="YOUR_API_KEY")
     model_name = "gpt-4.1"

@@ -100,7 +100,7 @@ def main() -> None:
 
             # Gợi ý mặc định cho 2x T4:
             # - GPU 0: diarization + Sortformer + Whisper large-v3
-            # - GPU 1: Demucs + PANNs + SepReformer + ASR-MoE nếu bật
+            # - GPU 1: Demucs + PANNs + SepReformer + PhoWhisper/ChunkFormer CTC nếu bật ASR-MoE
             DIAR_DEVICE_INDEX = 0
             SORTFORMER_DEVICE_INDEX = 0
             WHISPER_DEVICE_INDEX = 0
@@ -115,7 +115,7 @@ def main() -> None:
             INSTALL_DEPENDENCIES = True
             RUN_DEMUCS = True
             RUN_SEPREFORMER = True
-            ASR_MOE = False
+            ASR_MOE = True
             WHISPERX_WORD_TIMESTAMPS = False
             QWEN3OMNI = False
 
@@ -124,6 +124,9 @@ def main() -> None:
             # =========================
             LLM_CASE = "case_2"
             WHISPER_ARCH = "large-v3"
+            ASR_LANGUAGE = "vi"
+            PHOWHISPER_MODEL_NAME = "vinai/PhoWhisper-large"
+            CTC_MODEL_NAME = "khanhld/chunkformer-ctc-large-vie"
             COMPUTE_TYPE = "float16"
             ASR_THREADS = 4
             BATCH_SIZE = 64
@@ -143,6 +146,14 @@ def main() -> None:
             SORTFORMER_PARAM = True
             SORTFORMER_PAD_ONSET = 0.05
             SORTFORMER_PAD_OFFSET = 0.05
+
+            # ASR ensemble quality guard.
+            ASR_QUALITY_GUARD = True
+            ASR_MICRO_SEGMENT_SECONDS = 0.5
+            ASR_SHORT_SEGMENT_SECONDS = 1.0
+            ASR_VI_AGREEMENT_THRESHOLD = 0.75
+            ASR_CONTEXT_PAD_BEFORE = 0.25
+            ASR_CONTEXT_PAD_AFTER = 0.35
 
             # Opus/Ogg pre-decode controls.
             OPUS_DECODE_WORKERS = 8
@@ -182,7 +193,7 @@ def main() -> None:
                 "diar/vad/speaker-link": DIAR_DEVICE_INDEX,
                 "sortformer": SORTFORMER_DEVICE_INDEX,
                 "whisper": WHISPER_DEVICE_INDEX,
-                "asr_moe_parakeet_canary": ASR_MOE_DEVICE_INDEX,
+                "phowhisper/chunkformer_ctc": ASR_MOE_DEVICE_INDEX,
                 "panns": PANNS_DEVICE_INDEX,
                 "demucs": DEMUCS_DEVICE_INDEX,
                 "sepreformer": SEPREFORMER_DEVICE_INDEX,
@@ -201,11 +212,15 @@ def main() -> None:
             print("  AUDIO_INPUT_PATH =", AUDIO_INPUT_PATH or "<auto /kaggle/input>")
             print("  AUDIO_LIMIT_SECONDS =", AUDIO_LIMIT_SECONDS)
             print("  WHISPER_ARCH =", WHISPER_ARCH)
+            print("  ASR_LANGUAGE =", ASR_LANGUAGE)
+            print("  PHOWHISPER_MODEL_NAME =", PHOWHISPER_MODEL_NAME)
+            print("  CTC_MODEL_NAME =", CTC_MODEL_NAME)
             print("  COMPUTE_TYPE =", COMPUTE_TYPE)
             print("  BATCH_SIZE =", BATCH_SIZE)
             print("  ASR_THREADS =", ASR_THREADS)
             print("  MERGE_GAP =", MERGE_GAP)
             print("  SPEAKER_LINK_THRESHOLD =", SPEAKER_LINK_THRESHOLD)
+            print("  ASR_QUALITY_GUARD =", ASR_QUALITY_GUARD)
 
             AUDIO_TIMING = {}
 
@@ -326,7 +341,7 @@ def main() -> None:
             import importlib.metadata as importlib_metadata
             import numpy, numba, torch
 
-            for pkg in ["nemo-toolkit", "numpy", "numba", "torch"]:
+            for pkg in ["nemo-toolkit", "chunkformer", "transformers", "numpy", "numba", "torch"]:
                 try:
                     version = importlib_metadata.version(pkg) if pkg != "numpy" else numpy.__version__
                     print(pkg + ":", version)
@@ -501,6 +516,9 @@ def main() -> None:
                 "--min_cluster_size", str(DIAR_MIN_CLUSTER_SIZE),
                 "--clust_th", str(DIAR_CLUSTER_THRESHOLD),
                 "--whisper_arch", WHISPER_ARCH,
+                "--asr_language", ASR_LANGUAGE,
+                "--phowhisper_model_name", PHOWHISPER_MODEL_NAME,
+                "--ctc_model_name", CTC_MODEL_NAME,
                 "--compute_type", COMPUTE_TYPE,
                 "--threads", str(ASR_THREADS),
                 "--overlap_threshold", str(OVERLAP_THRESHOLD),
@@ -519,6 +537,12 @@ def main() -> None:
                 "--demucs" if RUN_DEMUCS else "--no-demucs",
                 "--sepreformer" if RUN_SEPREFORMER else "--no-sepreformer",
                 "--ASRMoE" if ASR_MOE else "--no-ASRMoE",
+                "--asr_quality_guard" if ASR_QUALITY_GUARD else "--no-asr_quality_guard",
+                "--asr_micro_segment_seconds", str(ASR_MICRO_SEGMENT_SECONDS),
+                "--asr_short_segment_seconds", str(ASR_SHORT_SEGMENT_SECONDS),
+                "--asr_vi_agreement_threshold", str(ASR_VI_AGREEMENT_THRESHOLD),
+                "--asr_context_pad_before", str(ASR_CONTEXT_PAD_BEFORE),
+                "--asr_context_pad_after", str(ASR_CONTEXT_PAD_AFTER),
                 "--whisperx_word_timestamps" if WHISPERX_WORD_TIMESTAMPS else "--no-whisperx_word_timestamps",
                 "--qwen3omni" if QWEN3OMNI else "--no-qwen3omni",
                 "--sortformer-param" if SORTFORMER_PARAM else "--no-sortformer-param",
@@ -613,7 +637,7 @@ def main() -> None:
                 "audio_name": "full",
                 "sample_rate": 16000,
                 "audio_duration_seconds": duration_seconds,
-                "segments": [{k: v for k, v in s.items() if k not in {"text", "text_whisper", "text_phowhisper", "text_chunkformer", "text_parakeet", "text_canary", "words"}} for s in normalized],
+                "segments": [{k: v for k, v in s.items() if k not in {"text", "text_whisper", "text_phowhisper", "text_chunkformer", "words"}} for s in normalized],
                 "metadata": {
                     "stage": "diarization_proxy_from_main",
                     "note": "main branch does not persist intermediate diarization JSON; this proxy keeps timeline/speaker data for HTML review.",
