@@ -3113,7 +3113,19 @@ if __name__ == "__main__":
         "--asr_moe_device_index",
         type=int,
         default=1,
-        help="Visible CUDA device index for optional PhoWhisper/ChunkFormer CTC ASR-MoE models. Use -1 for CPU.",
+        help="Fallback visible CUDA device index for ASR-MoE models. Use -1 for CPU.",
+    )
+    parser.add_argument(
+        "--phowhisper_device_index",
+        type=int,
+        default=None,
+        help="Visible CUDA device index for PhoWhisper. Defaults to --asr_moe_device_index. Use -1 for CPU.",
+    )
+    parser.add_argument(
+        "--ctc_device_index",
+        type=int,
+        default=None,
+        help="Visible CUDA device index for ChunkFormer CTC. Defaults to --asr_moe_device_index. Use -1 for CPU.",
     )
     parser.add_argument(
         "--panns_device_index",
@@ -3159,6 +3171,18 @@ if __name__ == "__main__":
     sortformer_device = _torch_device_from_index(args.sortformer_device_index)
     whisper_device_name, whisper_device_index = _whisper_device_from_index(args.whisper_device_index)
     asr_moe_device = _torch_device_from_index(args.asr_moe_device_index) if args.ASRMoE else device
+    phowhisper_device_index = (
+        args.phowhisper_device_index
+        if args.phowhisper_device_index is not None
+        else args.asr_moe_device_index
+    )
+    ctc_device_index = (
+        args.ctc_device_index
+        if args.ctc_device_index is not None
+        else args.asr_moe_device_index
+    )
+    phowhisper_device = _torch_device_from_index(phowhisper_device_index) if args.ASRMoE else device
+    ctc_device = _torch_device_from_index(ctc_device_index) if args.ASRMoE else device
     sepreformer_device = _torch_device_from_index(args.sepreformer_device_index) if args.sepreformer else device
     panns_device_name = _device_name_from_index(args.panns_device_index) if args.demucs else device_name
     demucs_device_name = _device_name_from_index(args.demucs_device_index) if args.demucs else device_name
@@ -3173,7 +3197,9 @@ if __name__ == "__main__":
         f"diar/vad/speaker-link={diar_device}, "
         f"sortformer={sortformer_device}, "
         f"whisper={whisper_device_label}, "
-        f"asr_moe={asr_moe_device}, "
+        f"asr_moe_fallback={asr_moe_device}, "
+        f"phowhisper={phowhisper_device}, "
+        f"chunkformer_ctc={ctc_device}, "
         f"sepreformer={sepreformer_device}, "
         f"panns={panns_device_name}, "
         f"demucs={demucs_device_name}"
@@ -3284,16 +3310,16 @@ if __name__ == "__main__":
         logger.debug(" * Loading PhoWhisper Model")
         phowhisper_model = vietnamese_asr.load_phowhisper_model(
             model_name=args.phowhisper_model_name,
-            device=asr_moe_device,
+            device=phowhisper_device,
         )
-        logger.debug(f" * PhoWhisper model loaded on {asr_moe_device}: {args.phowhisper_model_name}")
+        logger.debug(f" * PhoWhisper model loaded on {phowhisper_device}: {args.phowhisper_model_name}")
 
         logger.debug(" * Loading ChunkFormer CTC Model")
         chunkformer_model = vietnamese_asr.load_chunkformer_model(
             model_name=args.ctc_model_name,
-            device=asr_moe_device,
+            device=ctc_device,
         )
-        logger.debug(f" * ChunkFormer CTC model loaded on {asr_moe_device}: {args.ctc_model_name}")
+        logger.debug(f" * ChunkFormer CTC model loaded on {ctc_device}: {args.ctc_model_name}")
         # Client initialization
     #client = OpenAI(api_key="YOUR_API_KEY")
     model_name = "gpt-4.1"

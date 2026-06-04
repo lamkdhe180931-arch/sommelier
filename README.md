@@ -144,6 +144,9 @@ python main_original_ASR_MoE.py \
 - `--asr_language`: Whisper language code for ASR (default: vi)
 - `--phowhisper_model_name`: PhoWhisper model id (default: vinai/PhoWhisper-large)
 - `--ctc_model_name`: ChunkFormer CTC model id (default: khanhld/chunkformer-ctc-large-vie)
+- `--whisper_device_index`: Visible CUDA device index for Whisper
+- `--phowhisper_device_index`: Visible CUDA device index for PhoWhisper
+- `--ctc_device_index`: Visible CUDA device index for ChunkFormer CTC
 - `--batch_size`: Batch size (default: 64)
 - `--compute_type`: Computation type (default: float16)
 - `--initprompt` / `--no-initprompt`: Use initial prompt for Whisper

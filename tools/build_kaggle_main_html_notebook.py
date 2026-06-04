@@ -100,11 +100,12 @@ def main() -> None:
 
             # Gợi ý mặc định cho 2x T4:
             # - GPU 0: diarization + Sortformer + Whisper large-v3
-            # - GPU 1: Demucs + PANNs + SepReformer + PhoWhisper/ChunkFormer CTC nếu bật ASR-MoE
+            # - GPU 1: Demucs + PANNs + SepReformer + PhoWhisper + ChunkFormer CTC
             DIAR_DEVICE_INDEX = 0
             SORTFORMER_DEVICE_INDEX = 0
             WHISPER_DEVICE_INDEX = 0
-            ASR_MOE_DEVICE_INDEX = 1
+            PHOWHISPER_DEVICE_INDEX = 1
+            CTC_DEVICE_INDEX = 1
             PANNS_DEVICE_INDEX = 1
             DEMUCS_DEVICE_INDEX = 1
             SEPREFORMER_DEVICE_INDEX = 1
@@ -193,7 +194,8 @@ def main() -> None:
                 "diar/vad/speaker-link": DIAR_DEVICE_INDEX,
                 "sortformer": SORTFORMER_DEVICE_INDEX,
                 "whisper": WHISPER_DEVICE_INDEX,
-                "phowhisper/chunkformer_ctc": ASR_MOE_DEVICE_INDEX,
+                "phowhisper": PHOWHISPER_DEVICE_INDEX,
+                "chunkformer_ctc": CTC_DEVICE_INDEX,
                 "panns": PANNS_DEVICE_INDEX,
                 "demucs": DEMUCS_DEVICE_INDEX,
                 "sepreformer": SEPREFORMER_DEVICE_INDEX,
@@ -527,7 +529,8 @@ def main() -> None:
                 "--diar_device_index", str(DIAR_DEVICE_INDEX),
                 "--sortformer_device_index", str(SORTFORMER_DEVICE_INDEX),
                 "--whisper_device_index", str(WHISPER_DEVICE_INDEX),
-                "--asr_moe_device_index", str(ASR_MOE_DEVICE_INDEX),
+                "--phowhisper_device_index", str(PHOWHISPER_DEVICE_INDEX),
+                "--ctc_device_index", str(CTC_DEVICE_INDEX),
                 "--panns_device_index", str(PANNS_DEVICE_INDEX),
                 "--demucs_device_index", str(DEMUCS_DEVICE_INDEX),
                 "--sepreformer_device_index", str(SEPREFORMER_DEVICE_INDEX),
