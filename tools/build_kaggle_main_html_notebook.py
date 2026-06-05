@@ -366,13 +366,14 @@ def main() -> None:
         code(
             """
             import os
+            import shutil
             from pathlib import Path
 
             os.chdir("/kaggle/working/sommelier/podcast-pipeline")
 
             if INSTALL_DEPENDENCIES:
                 run_logged(["apt-get", "update", "-y"], "02_apt_update.log", tail=10)
-                run_logged(["apt-get", "install", "-y", "ffmpeg", "git", "git-lfs"], "03_apt_install.log", tail=10)
+                run_logged(["apt-get", "install", "-y", "ffmpeg", "git", "git-lfs", "libaio-dev"], "03_apt_install.log", tail=10)
                 run_logged(["python", "-m", "pip", "install", "-U", "pip", "setuptools", "wheel", "packaging", "ninja"], "04_pip_base.log", tail=12)
 
                 req = Path("requirements.txt").read_text(encoding="utf-8")
@@ -398,8 +399,46 @@ def main() -> None:
                     "python", "-m", "pip", "install", "--no-cache-dir", "--force-reinstall",
                     "numpy==2.2.6", "numba==0.61.2", "llvmlite==0.44.0",
                 ], "12_pip_numpy_numba.log", tail=12)
+
+                run_logged([
+                    "python", "-m", "pip", "install", "--no-cache-dir",
+                    "colorama==0.4.6",
+                ], "13a_pip_colorama.log", tail=8)
+                run_logged([
+                    "python", "-m", "pip", "install", "--no-cache-dir", "--no-deps",
+                    "chunkformer==1.2.2",
+                ], "13_pip_chunkformer.log", tail=30)
+
+                cudnn_dir = Path("/kaggle/working/cudnn8")
+                if cudnn_dir.exists():
+                    shutil.rmtree(cudnn_dir)
+                run_logged([
+                    "python", "-m", "pip", "install",
+                    "--target", str(cudnn_dir),
+                    "nvidia-cudnn-cu12==8.9.7.29",
+                ], "17_pip_cudnn8.log", cwd="/kaggle/working/sommelier/podcast-pipeline", tail=30)
             else:
                 print("INSTALL_DEPENDENCIES=False, bỏ qua cài dependencies.")
+
+            extra_ld_paths = [
+                "/kaggle/working/cudnn8/nvidia/cudnn/lib",
+                "/kaggle/working/cudnn8/nvidia/cublas/lib",
+                "/kaggle/working/cudnn8/nvidia/cuda_nvrtc/lib",
+            ]
+            os.environ["LD_LIBRARY_PATH"] = ":".join(
+                extra_ld_paths + [os.environ.get("LD_LIBRARY_PATH", "")]
+            ).rstrip(":")
+            print("LD_LIBRARY_PATH =", os.environ["LD_LIBRARY_PATH"])
+
+            from chunkformer import ChunkFormerModel
+            print("chunkformer import ok:", ChunkFormerModel)
+
+            cudnn_matches = sorted(Path("/kaggle/working/cudnn8").rglob("libcudnn_ops_infer.so.8"))
+            print("libcudnn_ops_infer.so.8 matches:", len(cudnn_matches))
+            for path in cudnn_matches[:5]:
+                print(path)
+            if not cudnn_matches:
+                raise RuntimeError("Không tìm thấy libcudnn_ops_infer.so.8 sau khi cài cuDNN8.")
             """
         ),
         md("## 3. Kiểm tra môi trường"),
@@ -632,8 +671,9 @@ def main() -> None:
             MAIN_PIPELINE_START_PERF = time.perf_counter()
             MAIN_PIPELINE_START_CLOCK = now_label()
             print("Main pipeline timing start:", MAIN_PIPELINE_START_CLOCK)
+            env = os.environ.copy()
             try:
-                run_logged(cmd, "18_main_pipeline_batch.log", cwd="/kaggle/working/sommelier/podcast-pipeline", tail=100)
+                run_logged(cmd, "18_main_pipeline_batch.log", cwd="/kaggle/working/sommelier/podcast-pipeline", env=env, tail=100)
             finally:
                 MAIN_PIPELINE_END_PERF = time.perf_counter()
                 MAIN_PIPELINE_END_CLOCK = now_label()
