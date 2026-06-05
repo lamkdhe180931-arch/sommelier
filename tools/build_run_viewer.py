@@ -62,6 +62,7 @@ SEGMENT_FIELDS = [
     "duration",
     "speaker",
     "text",
+    "correct_script",
     "text_whisper",
     "text_phowhisper",
     "text_chunkformer",
@@ -275,7 +276,14 @@ def build_stage(run_root: Path, stage: dict, html_dir: Path) -> dict:
 
 def build_runs(root: Path, html_dir: Path) -> list[dict]:
     runs = []
-    for run_root in sorted(root.glob("run_full*"), key=natural_run_key):
+    run_roots: list[Path] = []
+    if (root / "01_diarization" / "diarization.json").exists():
+        run_roots.append(root)
+    for candidate in sorted(root.glob("run_full*"), key=natural_run_key):
+        if candidate not in run_roots:
+            run_roots.append(candidate)
+
+    for run_root in run_roots:
         if not run_root.is_dir():
             continue
         stages = [build_stage(run_root, stage, html_dir) for stage in STAGE_DEFS]
@@ -299,8 +307,9 @@ HTML_TEMPLATE = r"""<!doctype html>
     :root { color-scheme: light; --border:#d8dee8; --muted:#667085; --bg:#f7f8fb; --text:#172033; --blue:#1f6feb; --red:#b42318; --green:#067647; --amber:#b54708; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); }
-    header { height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: white; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+    header { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 18px; background: white; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
     h1 { font-size: 18px; margin: 0; font-weight: 700; }
+    .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
     .layout { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 56px); }
     aside { background: white; border-right: 1px solid var(--border); padding: 14px; overflow: auto; }
     main { padding: 16px; overflow: auto; }
@@ -316,6 +325,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     .chip.amber { color: var(--amber); background: #fffaeb; }
     .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; align-items: center; }
     input, select { height: 34px; border: 1px solid var(--border); border-radius: 7px; padding: 0 10px; min-width: 180px; background: white; }
+    .correct-script { width: 100%; min-width: 260px; min-height: 68px; resize: vertical; border: 1px solid var(--border); border-radius: 7px; padding: 7px 8px; font: inherit; line-height: 1.35; color: var(--text); background: white; }
     audio { width: 100%; height: 36px; margin-top: 8px; }
     .table-wrap { overflow: auto; max-height: 65vh; border: 1px solid var(--border); border-radius: 8px; }
     table { border-collapse: collapse; width: 100%; font-size: 12px; background: white; }
@@ -339,7 +349,11 @@ HTML_TEMPLATE = r"""<!doctype html>
 <body>
   <header>
     <h1>Run Full Viewer</h1>
-    <div class="muted" id="generatedAt"></div>
+    <div class="header-actions">
+      <button class="small" type="button" onclick="saveAnnotatedHtml()">Save annotated HTML</button>
+      <span class="muted" id="annotationStatus"></span>
+      <span class="muted" id="generatedAt"></span>
+    </div>
   </header>
   <div class="layout">
     <aside>
@@ -369,6 +383,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     let currentRun = 0;
     let currentStage = "1";
     let stopTimer = null;
+    const ANNOTATION_PREFIX = "sommelier-run-viewer-correct-script:";
 
     const player = document.getElementById("player");
     const nowPlaying = document.getElementById("nowPlaying");
@@ -385,6 +400,99 @@ HTML_TEMPLATE = r"""<!doctype html>
 
     function activeRun() { return DATA.runs[currentRun]; }
     function activeStage() { return activeRun().stages.find(s => s.id === currentStage) || activeRun().stages[0]; }
+
+    function annotationStorageKey(runName, stageId, row, i) {
+      return `${ANNOTATION_PREFIX}${runName}:${stageId}:${row.index ?? i}`;
+    }
+
+    function hydrateAnnotationsFromStorage() {
+      DATA.runs.forEach(run => {
+        run.stages.forEach(stage => {
+          (stage.segments || []).forEach((row, i) => {
+            const stored = localStorage.getItem(annotationStorageKey(run.name, stage.id, row, i));
+            if (stored !== null) row.correct_script = stored;
+          });
+        });
+      });
+    }
+
+    function setAnnotationStatus(message) {
+      const el = document.getElementById("annotationStatus");
+      if (!el) return;
+      el.textContent = message;
+      if (message) {
+        window.setTimeout(() => {
+          if (el.textContent === message) el.textContent = "";
+        }, 2500);
+      }
+    }
+
+    function autosizeCorrectScript(area) {
+      area.style.height = "auto";
+      area.style.height = `${Math.max(68, area.scrollHeight)}px`;
+    }
+
+    function updateCorrectScript(area) {
+      const rowIndex = Number(area.dataset.rowIndex);
+      const stage = activeStage();
+      const row = (stage.segments || [])[rowIndex];
+      if (!row) return;
+      row.correct_script = area.value;
+      localStorage.setItem(annotationStorageKey(activeRun().name, stage.id, row, rowIndex), area.value);
+      autosizeCorrectScript(area);
+      setAnnotationStatus("Draft saved");
+    }
+
+    function currentFileName() {
+      const name = decodeURIComponent((location.pathname.split("/").pop() || "").trim());
+      return name || "index.html";
+    }
+
+    function annotatedHtml() {
+      hydrateAnnotationsFromStorage();
+      const replacement = `const DATA = ${JSON.stringify(DATA)};\n    let currentRun`;
+      const html = "<!doctype html>\n" + document.documentElement.outerHTML + "\n";
+      return html.replace(/const DATA = [\s\S]*?;\n    let currentRun/, replacement);
+    }
+
+    async function saveAnnotatedHtml() {
+      const blob = new Blob([annotatedHtml()], { type: "text/html;charset=utf-8" });
+      const suggestedName = currentFileName();
+
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName,
+            types: [
+              {
+                description: "HTML viewer",
+                accept: { "text/html": [".html", ".htm"] },
+              },
+            ],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          setAnnotationStatus("Annotated HTML saved");
+          return;
+        } catch (error) {
+          if (error && error.name === "AbortError") {
+            setAnnotationStatus("Save canceled");
+            return;
+          }
+        }
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = suggestedName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setAnnotationStatus("Annotated HTML downloaded");
+    }
 
     function renderRuns() {
       const el = document.getElementById("runList");
@@ -532,6 +640,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         ["separation_status", "sep"],
         ["has_overlap", "ov"],
         ["text", "text"],
+        ["correct_script", "correct script"],
         ["text_whisper", "whisper"],
         ["text_phowhisper", "pho"],
         ["text_chunkformer", "chunk"],
@@ -547,6 +656,9 @@ HTML_TEMPLATE = r"""<!doctype html>
         const cells = columns.map(([key]) => {
           if (key === "actions") return `<td>${actions}</td>`;
           if (key === "start" || key === "end") return `<td class="mono">${fmtTime(row[key])}</td>`;
+          if (key === "correct_script") {
+            return `<td class="text-cell"><textarea class="correct-script" data-row-index="${i}" data-segment-index="${esc(row.index || i)}" oninput="updateCorrectScript(this)" onfocus="autosizeCorrectScript(this)" spellcheck="false">${esc(row.correct_script || "")}</textarea></td>`;
+          }
           const cls = key.startsWith("text") ? "text-cell" : "";
           return `<td class="${cls}">${esc(Array.isArray(row[key]) ? row[key].join(", ") : row[key])}</td>`;
         }).join("");
@@ -611,6 +723,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         </div>`;
       const markdown = stage.markdown ? `<details><summary>Eval markdown</summary><pre>${esc(stage.markdown)}</pre></details>` : "";
       content.innerHTML = controls + markdown + renderRows(stage);
+      document.querySelectorAll("textarea.correct-script").forEach(autosizeCorrectScript);
       document.getElementById("logTail").textContent = stage.log_tail || "No log";
       renderPairs(stage);
     }
@@ -622,6 +735,8 @@ HTML_TEMPLATE = r"""<!doctype html>
       renderSummary(stage);
       renderContent(stage);
     }
+
+    hydrateAnnotationsFromStorage();
 
     if (!DATA.runs.length) {
       document.getElementById("content").innerHTML = '<div class="empty">Không tìm thấy run_full nào.</div>';

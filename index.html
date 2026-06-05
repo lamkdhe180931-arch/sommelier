@@ -11,7 +11,7 @@
   * { box-sizing: border-box; }
   body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; margin: 0;
     padding: 16px 24px; background: var(--bg); color: var(--text); }
-  .container { max-width: 1400px; margin: auto; }
+  .container { max-width: none; margin: auto; }
   h1 { margin: 0 0 2px; font-size: 22px; }
   .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
   .sticky-player { position: sticky; top: 0; background: var(--card);
@@ -47,7 +47,7 @@
   .controls input[type=text] { flex: 1; min-width: 200px; }
   .count-pill { background: #eee; padding: 3px 10px; border-radius: 12px; font-size: 12px;
     color: #555; }
-  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table { width: 100%; min-width: 1700px; border-collapse: collapse; font-size: 12.5px; }
   table th { text-align: left; padding: 7px 6px; border-bottom: 2px solid #ddd;
     background: var(--card); font-weight: 600; font-size: 11px; text-transform: uppercase;
     letter-spacing: 0.5px; color: var(--muted); }
@@ -58,7 +58,15 @@
   .seg-time { font-family: ui-monospace, monospace; font-size: 11.5px; color: #555;
     white-space: nowrap; }
   .seg-dur { font-size: 10px; color: #999; }
-  .seg-text { max-width: 460px; line-height: 1.45; }
+  .seg-text { min-width: 640px; max-width: 860px; line-height: 1.55; font-size: 13px; }
+  .correct-cell, .note-cell { min-width: 300px; max-width: 380px; }
+  .correct-script, .note-script { width: 100%; min-height: 78px; resize: vertical; border: 1px solid #d0d5dd;
+    border-radius: 6px; padding: 7px 8px; font: inherit; font-size: 12.5px; line-height: 1.4;
+    background: #fff; color: var(--text); }
+  .save-btn { padding: 6px 10px; border: 1px solid var(--accent); border-radius: 4px;
+    background: var(--accent); color: #fff; font-size: 12px; cursor: pointer; }
+  .save-btn:hover { background: #1565c0; }
+  .annotation-status { font-size: 12px; color: var(--muted); min-width: 90px; }
   .alt-line { font-size: 11px; color: #888; margin-top: 2px; font-family: ui-monospace, monospace; }
   .alt-line .src { color: #c2185b; font-weight: 600; }
   .flags { display: flex; gap: 3px; flex-wrap: wrap; max-width: 180px; }
@@ -155,13 +163,15 @@
         <option value="qa">Quality guard intervened</option>
         <option value="alts_disagree">ASR models disagree</option>
       </select>
+      <button id="save-annotated" class="save-btn" type="button">Save annotated HTML</button>
+      <span id="annotation-status" class="annotation-status"></span>
       <span class="count-pill" id="visible-count">— / 138</span>
     </div>
     <div style="overflow:auto;max-height:80vh">
     <table>
       <thead>
         <tr>
-          <th>#</th><th>Time</th><th>Spk</th><th style="text-align: center;">Chunk</th><th>Audio</th><th>Text</th><th>Flags</th>
+          <th>#</th><th>Time</th><th>Spk</th><th style="text-align: center;">Chunk</th><th>Audio</th><th>Text</th><th>Correct Script</th><th>Note</th>
         </tr>
       </thead>
       <tbody id="segments"></tbody>
@@ -188,6 +198,7 @@ if (typeof VAD_CHUNKS === "undefined") {
   window.VAD_CHUNKS = [];
 }
 
+const ANNOTATION_PREFIX = "sommelier-correct-script:";
 let DIAR_STATS = { counts: {}, durs: {} };
 let TOTAL_DUR = 0;
 
@@ -198,6 +209,11 @@ function fmtTime(t) {
 }
 function fmtRange(s, e) { return fmtTime(s) + " → " + fmtTime(e); }
 function dur(s) { return (s.end - s.start).toFixed(2) + "s"; }
+
+function displaySegmentNumber(seg) {
+  const idx = SEGMENTS.indexOf(seg);
+  return idx >= 0 ? idx + 1 : (seg.index || "");
+}
 
 function getSegmentChunkIndex(seg) {
   if (!window.VAD_CHUNKS || window.VAD_CHUNKS.length === 0) {
@@ -234,7 +250,7 @@ function pauseOtherAudio(except) {
 
 function setNowPlaying(seg) {
   if (seg) {
-    nowLabel.textContent = "#" + seg.index + " " + seg.speaker + " · " + fmtRange(seg.start, seg.end);
+    nowLabel.textContent = "#" + displaySegmentNumber(seg) + " " + seg.speaker + " · " + fmtRange(seg.start, seg.end);
   }
 }
 
@@ -318,10 +334,10 @@ function initStageData() {
 
   SEGMENTS.forEach(s => {
     if (s.end > TOTAL_DUR) TOTAL_DUR = s.end;
-
+    
     const spk = s.speaker || "UNKNOWN";
     s.speaker = spk;
-
+    
     if (!DIAR_STATS.counts[spk]) {
       DIAR_STATS.counts[spk] = 0;
       DIAR_STATS.durs[spk] = 0;
@@ -329,7 +345,7 @@ function initStageData() {
     DIAR_STATS.counts[spk]++;
     DIAR_STATS.durs[spk] += (s.end - s.start);
   });
-
+  
   Object.keys(DIAR_STATS.durs).forEach(k => {
     DIAR_STATS.durs[k] = parseFloat(DIAR_STATS.durs[k].toFixed(2));
   });
@@ -410,7 +426,7 @@ function initStageData() {
       r.style.cursor = "pointer";
       r.addEventListener("click", () => jumpFull(s.start, s));
       const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-      title.textContent = "#" + s.index + " " + s.speaker + " " + fmtRange(s.start, s.end) + "\n" + (s.text || "");
+      title.textContent = "#" + (idx + 1) + " " + s.speaker + " " + fmtRange(s.start, s.end) + "\n" + (s.text || "");
       r.appendChild(title);
       svg.appendChild(r);
     });
@@ -466,6 +482,118 @@ function altsHTML(s) {
 
 function escapeHTML(t) {
   return (t || "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
+}
+
+function annotationKey(stage, seg, idx, field) {
+  const page = location.pathname || document.title || "sommelier";
+  return ANNOTATION_PREFIX + page + ":" + stage + ":" + (seg.index || idx) + ":" + (field || "correct_script");
+}
+
+function setAnnotationStatus(message) {
+  const status = document.getElementById("annotation-status");
+  if (!status) return;
+  status.textContent = message;
+  if (message) {
+    window.setTimeout(() => {
+      if (status.textContent === message) status.textContent = "";
+    }, 2500);
+  }
+}
+
+function hydrateCorrectScripts() {
+  Object.keys(STAGE_DATA || {}).forEach(stage => {
+    (STAGE_DATA[stage] || []).forEach((seg, idx) => {
+      const correct = localStorage.getItem(annotationKey(stage, seg, idx, "correct_script"));
+      const note = localStorage.getItem(annotationKey(stage, seg, idx, "note"));
+      if (correct !== null) seg.correct_script = correct;
+      if (note !== null) seg.note = note;
+    });
+  });
+}
+
+function autosizeAnnotation(area) {
+  if (!area) return;
+  area.style.height = "auto";
+  area.style.height = Math.max(78, area.scrollHeight) + "px";
+}
+
+function autosizeCorrectScript(area) {
+  autosizeAnnotation(area);
+}
+
+function autosizeNoteScript(area) {
+  autosizeAnnotation(area);
+}
+
+function updateCorrectScript(idx, value) {
+  const seg = SEGMENTS[idx];
+  if (!seg) return;
+  seg.correct_script = value;
+  localStorage.setItem(annotationKey(current_stage, seg, idx, "correct_script"), value);
+  setAnnotationStatus("Draft saved");
+}
+
+function updateNote(idx, value) {
+  const seg = SEGMENTS[idx];
+  if (!seg) return;
+  seg.note = value;
+  localStorage.setItem(annotationKey(current_stage, seg, idx, "note"), value);
+  setAnnotationStatus("Draft saved");
+}
+
+function currentFileName() {
+  const name = decodeURIComponent((location.pathname.split("/").pop() || "").trim());
+  return name || "index.html";
+}
+
+function annotatedHtml() {
+  hydrateCorrectScripts();
+  const selectedStage = JSON.stringify(current_stage);
+  const injectedData =
+    "const STAGE_DATA = " + JSON.stringify(STAGE_DATA) + ";\n" +
+    "const VAD_CHUNKS = " + JSON.stringify(VAD_CHUNKS || []) + ";\n" +
+    "let current_stage = " + selectedStage + " in STAGE_DATA ? " + selectedStage + " : Object.keys(STAGE_DATA)[0];\n" +
+    "let SEGMENTS = STAGE_DATA[current_stage] || [];\n";
+  let output = "<!DOCTYPE html>\n" + document.documentElement.outerHTML + "\n";
+  output = output.replace(
+    /const STAGE_DATA = [\s\S]*?;\nconst VAD_CHUNKS = [\s\S]*?;\nlet current_stage = [\s\S]*?;\nlet SEGMENTS = [\s\S]*?;\n/,
+    injectedData
+  );
+  return output;
+}
+
+async function saveAnnotatedHtml() {
+  const blob = new Blob([annotatedHtml()], { type: "text/html;charset=utf-8" });
+  const suggestedName = currentFileName();
+
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [{ description: "HTML report", accept: { "text/html": [".html", ".htm"] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      setAnnotationStatus("Saved");
+      return;
+    } catch (error) {
+      if (error && error.name === "AbortError") {
+        setAnnotationStatus("Canceled");
+        return;
+      }
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = suggestedName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setAnnotationStatus("Downloaded");
 }
 
 function detailsHTML(s) {
@@ -543,24 +671,27 @@ function renderTable(filterText, filterSpk, filterChunk, filterFlag) {
     tr.id = "seg-row-" + idx;
     const c = COLORS[s.speaker] || "#888";
     const speakerLabel = s.speaker ? s.speaker.replace("SPEAKER_", "") : "?";
-
+    
     // Handle cases where audio or text is missing (e.g. Diarization stage)
     const audioHtml = s.audio_file ? '<audio class="mini" controls preload="none" src="' + s.audio_file + '"></audio>' : '<span style="color:#999;font-size:10px">No cut audio</span>';
     const textHtml = s.text !== undefined ? escapeHTML(s.text) + altsHTML(s) + '<details><summary>details</summary><div class="details-box">' + detailsHTML(s) + '</div></details>' : '<span style="color:#999;font-style:italic">No text yet</span>';
-
+    const correctHtml = '<textarea class="correct-script" data-i="' + idx + '" placeholder="Correct script..." spellcheck="false" onclick="event.stopPropagation()" onfocus="autosizeCorrectScript(this)" oninput="updateCorrectScript(' + idx + ', this.value); autosizeCorrectScript(this)">' + escapeHTML(s.correct_script || '') + '</textarea>';
+    const noteHtml = '<textarea class="note-script" data-i="' + idx + '" placeholder="Note..." spellcheck="false" onclick="event.stopPropagation()" onfocus="autosizeNoteScript(this)" oninput="updateNote(' + idx + ', this.value); autosizeNoteScript(this)">' + escapeHTML(s.note || '') + '</textarea>';
+    
     const chunkLabel = segmentChunkIdx !== -1 ? String(segmentChunkIdx + 1).padStart(2, '0') : "—";
 
     tr.innerHTML =
-      '<td>' + (s.index || '') + '</td>' +
+      '<td>' + (idx + 1) + '</td>' +
       '<td class="seg-time">' + fmtRange(s.start, s.end) + '<div class="seg-dur">' + d.toFixed(2) + 's</div>' +
         '<button class="jump-btn" data-t="' + s.start + '" data-i="' + idx + '">▶ segment</button></td>' +
       '<td><span class="speaker-badge" style="background:' + c + '">' + speakerLabel + '</span></td>' +
       '<td style="text-align: center; vertical-align: middle; font-family: ui-monospace, monospace; font-weight: bold; color: #555;">' + chunkLabel + '</td>' +
       '<td>' + audioHtml + '</td>' +
       '<td class="seg-text">' + textHtml + '</td>' +
-      '<td><div class="flags">' + flagsHTML(s) + '</div></td>';
+      '<td class="correct-cell">' + correctHtml + '</td>' +
+      '<td class="note-cell">' + noteHtml + '</td>';
     tr.addEventListener("click", event => {
-      if (event.target.closest("audio")) event.preventDefault();
+      if (event.target.closest("audio, textarea, button")) return;
       playSegment(s);
     });
     tbody.appendChild(tr);
@@ -590,6 +721,8 @@ function renderTable(filterText, filterSpk, filterChunk, filterFlag) {
       playSegment(SEGMENTS[i]);
     });
   });
+  tbody.querySelectorAll(".correct-script").forEach(autosizeCorrectScript);
+  tbody.querySelectorAll(".note-script").forEach(autosizeNoteScript);
 }
 
 const fchk = document.getElementById("filter-chunk");
@@ -598,6 +731,7 @@ searchEl.addEventListener("input", () => renderTable(searchEl.value, fspk.value,
 fspk.addEventListener("change", () => renderTable(searchEl.value, fspk.value, fchk.value, fflag.value));
 fchk.addEventListener("change", () => renderTable(searchEl.value, fspk.value, fchk.value, fflag.value));
 fflag.addEventListener("change", () => renderTable(searchEl.value, fspk.value, fchk.value, fflag.value));
+document.getElementById("save-annotated").addEventListener("click", saveAnnotatedHtml);
 
 const stageSelect = document.getElementById("stage-select");
 function initStages() {
@@ -609,7 +743,7 @@ function initStages() {
     if (k === current_stage) opt.selected = true;
     stageSelect.appendChild(opt);
   });
-
+  
   stageSelect.addEventListener("change", () => {
     current_stage = stageSelect.value;
     SEGMENTS = STAGE_DATA[current_stage] || [];
@@ -619,6 +753,7 @@ function initStages() {
 }
 
 initStages();
+hydrateCorrectScripts();
 initStageData();
 renderTable("", "", "", "");
 
@@ -630,11 +765,11 @@ playerFull.addEventListener("timeupdate", () => {
   SEGMENTS.forEach((seg, idx) => {
     if (t >= seg.start && t <= seg.end) currentIndices.push(idx);
   });
-
+  
   const newStr = currentIndices.join(",");
   if (activeIndicesStr !== newStr) {
     document.querySelectorAll(".active-row").forEach(el => el.classList.remove("active-row"));
-
+    
     let scrolled = false;
     currentIndices.forEach(idx => {
       const cur = document.getElementById("seg-row-" + idx);
@@ -649,7 +784,7 @@ playerFull.addEventListener("timeupdate", () => {
         }
       }
     });
-
+    
     if (currentIndices.length > 0) {
       let bestIdx = currentIndices[0];
       let maxStart = SEGMENTS[bestIdx].start;
@@ -660,7 +795,7 @@ playerFull.addEventListener("timeupdate", () => {
         }
       }
       const s = SEGMENTS[bestIdx];
-      nowLabel.textContent = "#" + s.index + " " + s.speaker + " · " + fmtRange(s.start, s.end);
+      nowLabel.textContent = "#" + (bestIdx + 1) + " " + s.speaker + " · " + fmtRange(s.start, s.end);
     } else {
       nowLabel.textContent = "—";
     }
