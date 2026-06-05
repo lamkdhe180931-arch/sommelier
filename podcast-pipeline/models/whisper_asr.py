@@ -26,7 +26,7 @@ class VadFreeFasterWhisperPipeline(FasterWhisperPipeline):
         tokenizer=None,
         device: Union[int, str, "torch.device"] = -1,
         framework="pt",
-        language="en",
+        language="vi",
         suppress_numerals: bool = False,
         **kwargs,
     ):
@@ -274,7 +274,7 @@ def load_asr_model(
     device_index: int = 0,
     compute_type: str = "float16",
     asr_options: Optional[dict] = None,
-    language: str = "en",
+    language: str = "vi",
     vad_model=None,
     vad_options=None,
     model: Optional[WhisperModel] = None,
@@ -307,7 +307,11 @@ def load_asr_model(
     """
 
     if whisper_arch.endswith(".en"):
-        language = "en"
+        raise ValueError(
+            "English-only Whisper architectures are not supported by the "
+            "Vietnamese pipeline. Use a multilingual Whisper model with "
+            "language='vi'."
+        )
 
     model = model or WhisperModel(
         whisper_arch,

@@ -324,10 +324,9 @@ def asr(vad_segments, audio, asr_model):
         dummy_vad = [{"start": 0.0, "end": duration_sec}]
 
         try:
-            # Language detection (can be performed per segment if needed, or fixed to 'en')
-            # Here we default to 'en' following the existing flow; use detect_language if detection is needed
+            # Language detection can be performed per segment if needed.
             # language, prob = asr_model.detect_language(segment_audio_16k)
-            language = "en"
+            language = "vi"
 
             transcribe_result = asr_model.transcribe(
                 segment_audio_16k,
@@ -404,12 +403,12 @@ def asr_MoE(vad_segments, audio, asr_model, asr_model_2, canary_model, segment_d
             )
 
             text_whisper = ""
-            detected_language = "en"
+            detected_language = "vi"
             words = []
 
             if transcribe_result and "segments" in transcribe_result and len(transcribe_result["segments"]) > 0:
                 text_whisper = " ".join([s["text"] for s in transcribe_result["segments"]]).strip()
-                detected_language = transcribe_result.get("language", "en")
+                detected_language = transcribe_result.get("language", "vi")
                 if enable_word_timestamps:
                     for s in transcribe_result["segments"]:
                         if "words" in s: words.extend(s["words"])
@@ -423,7 +422,7 @@ def asr_MoE(vad_segments, audio, asr_model, asr_model_2, canary_model, segment_d
             }
         except Exception as e:
             logger.error(f"Whisper failed: {e}")
-            return {"text": "", "language": "en", "words": [], "time": 0.0}
+            return {"text": "", "language": "vi", "words": [], "time": 0.0}
 
     def run_parakeet_task(segment_audio_16k):
         try:

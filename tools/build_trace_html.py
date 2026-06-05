@@ -283,7 +283,7 @@ def build_html(input_path: Path, out_path: Path, extract_dir: Path | None = None
     export_count = len(stages["export"].segments)
 
     html_text = f"""<!doctype html>
-<html lang="en">
+<html lang="vi">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />

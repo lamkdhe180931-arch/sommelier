@@ -47,6 +47,46 @@ class KaggleTraceNotebookGPUClampTests(unittest.TestCase):
         self.assertIn('"--compute_type", EFFECTIVE_COMPUTE_TYPE', pipeline_cell)
         self.assertNotIn('"--compute_type", COMPUTE_TYPE', pipeline_cell)
 
+    def test_notebook_installs_and_import_checks_chunkformer(self):
+        notebook = json.loads((ROOT / "kaggle_trace_run_full.ipynb").read_text(encoding="utf-8"))
+        code_cells = ["".join(cell.get("source", [])) for cell in notebook["cells"] if cell.get("cell_type") == "code"]
+        install_cell = next(cell for cell in code_cells if "13_pip_chunkformer.log" in cell)
+        check_cell = next(cell for cell in code_cells if "chunkformer import ok" in cell)
+
+        self.assertIn('"chunkformer==1.2.2"', install_cell)
+        self.assertIn('"colorama==0.4.6"', install_cell)
+        self.assertIn('"--no-deps"', install_cell)
+        self.assertIn("from chunkformer import ChunkFormerModel", check_cell)
+
+    def test_zip_cell_requires_real_stage_outputs_before_download(self):
+        notebook = json.loads((ROOT / "kaggle_trace_run_full.ipynb").read_text(encoding="utf-8"))
+        code_cells = ["".join(cell.get("source", [])) for cell in notebook["cells"] if cell.get("cell_type") == "code"]
+        zip_cell = next(cell for cell in code_cells if "run_full_download" in cell)
+
+        for expected in [
+            '"01_diarization" / "diarization.json"',
+            '"02_music_clean" / "segment_flags.json"',
+            '"02_music_clean" / "cleaned_audio.wav"',
+            '"03_overlap" / "segments.json"',
+            '"04_asr" / "transcript.json"',
+            "Path(FINAL_DIR) / \"data_audio.json\"",
+        ]:
+            self.assertIn(expected, zip_cell)
+        self.assertIn("raise FileNotFoundError", zip_cell)
+
+    def test_notebook_controls_vietnamese_asr_models_explicitly(self):
+        notebook = json.loads((ROOT / "kaggle_trace_run_full.ipynb").read_text(encoding="utf-8"))
+        code_cells = ["".join(cell.get("source", [])) for cell in notebook["cells"] if cell.get("cell_type") == "code"]
+        controls_cell = next(cell for cell in code_cells if "WHISPER_ARCH" in cell and "COMPUTE_TYPE" in cell)
+        pipeline_cell = next(cell for cell in code_cells if "main_original_ASR_MoE.py" in cell and "--whisper_arch" in cell)
+
+        self.assertIn('ASR_LANGUAGE = "vi"', controls_cell)
+        self.assertIn('PHOWHISPER_MODEL_NAME = "vinai/PhoWhisper-large"', controls_cell)
+        self.assertIn('CTC_MODEL_NAME = "khanhld/chunkformer-ctc-large-vie"', controls_cell)
+        self.assertIn('"--asr_language", ASR_LANGUAGE', pipeline_cell)
+        self.assertIn('"--phowhisper_model_name", PHOWHISPER_MODEL_NAME', pipeline_cell)
+        self.assertIn('"--ctc_model_name", CTC_MODEL_NAME', pipeline_cell)
+
 
 if __name__ == "__main__":
     unittest.main()

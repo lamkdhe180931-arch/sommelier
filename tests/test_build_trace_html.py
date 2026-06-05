@@ -73,6 +73,7 @@ class BuildTraceHtmlTests(unittest.TestCase):
 
             html = out.read_text(encoding="utf-8")
             self.assertIn("Sommelier True Trace Report", html)
+            self.assertIn('<html lang="vi">', html)
             self.assertIn("01_diarization/diarization.json", html)
             self.assertIn("02_music_clean/segment_flags.json", html)
             self.assertIn("05_export/final/data_audio/00000_SPEAKER_00.mp3", html)

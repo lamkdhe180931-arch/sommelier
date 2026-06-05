@@ -264,7 +264,7 @@ The following environment has been verified to run the full pipeline end-to-end 
 | WhisperX | 3.4.2 |
 | Demucs | 4.0.1 |
 
-Test result (60-second English podcast, single A100 GPU):
+Test result (60-second Vietnamese podcast, single A100 GPU):
 - 17 segments extracted, 0 failures
 - Total processing time: ~28 seconds
 - VAD + Sortformer RT factor: 0.013

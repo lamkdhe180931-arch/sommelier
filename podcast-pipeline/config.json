@@ -2,9 +2,9 @@
     "language": {
         "multilingual": false,
         "supported": [
-          "en", "ko", "ja", "zh", "es", "fr", "de", "it", "pt", "ru", "ar", "hi"
+            "vi"
         ]
-      },
+    },
     "entrypoint": {
         "input_folder_path": "audio_pipeline/test",
         "SAMPLE_RATE": 16000

@@ -1541,8 +1541,8 @@ def asr(vad_segments, audio):
         dummy_vad = [{"start": 0.0, "end": duration_sec}]
 
         try:
-            # Language detection (can be done per segment or fixed to 'en')
-            # Default to 'en' following existing flow; use detect_language if needed
+            # Language detection can be done per segment if needed.
+            # The Vietnamese pipeline defaults ASR to 'vi'.
             # language, prob = asr_model.detect_language(segment_audio_16k)
             language = getattr(args, "asr_language", "vi")
 
