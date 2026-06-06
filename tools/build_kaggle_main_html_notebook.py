@@ -365,6 +365,7 @@ def main() -> None:
         md("## 2. Cài dependencies"),
         code(
             """
+            import ctypes
             import os
             import shutil
             from pathlib import Path
@@ -414,17 +415,32 @@ def main() -> None:
                     shutil.rmtree(cudnn_dir)
                 run_logged([
                     "python", "-m", "pip", "install",
+                    "--no-cache-dir", "--upgrade", "--force-reinstall", "--ignore-installed",
                     "--target", str(cudnn_dir),
                     "nvidia-cudnn-cu12==8.9.7.29",
                 ], "17_pip_cudnn8.log", cwd="/kaggle/working/sommelier/podcast-pipeline", tail=30)
             else:
                 print("INSTALL_DEPENDENCIES=False, bỏ qua cài dependencies.")
 
-            extra_ld_paths = [
-                "/kaggle/working/cudnn8/nvidia/cudnn/lib",
-                "/kaggle/working/cudnn8/nvidia/cublas/lib",
-                "/kaggle/working/cudnn8/nvidia/cuda_nvrtc/lib",
-            ]
+            def _existing_dirs(paths):
+                seen = set()
+                result = []
+                for path in paths:
+                    path = str(path)
+                    if path and path not in seen and Path(path).exists():
+                        seen.add(path)
+                        result.append(path)
+                return result
+
+            cudnn_dir = Path("/kaggle/working/cudnn8")
+            extra_ld_paths = _existing_dirs(
+                [
+                    cudnn_dir / "nvidia" / "cudnn" / "lib",
+                    cudnn_dir / "nvidia" / "cublas" / "lib",
+                    cudnn_dir / "nvidia" / "cuda_nvrtc" / "lib",
+                    *cudnn_dir.glob("nvidia/*/lib"),
+                ]
+            )
             os.environ["LD_LIBRARY_PATH"] = ":".join(
                 extra_ld_paths + [os.environ.get("LD_LIBRARY_PATH", "")]
             ).rstrip(":")
@@ -439,6 +455,37 @@ def main() -> None:
                 print(path)
             if not cudnn_matches:
                 raise RuntimeError("Không tìm thấy libcudnn_ops_infer.so.8 sau khi cài cuDNN8.")
+
+            preload_names = ["libcudnn.so.8", "libcudnn_ops_infer.so.8"]
+            preload_paths = []
+            for name in preload_names:
+                matches = sorted(cudnn_dir.rglob(name))
+                if matches:
+                    preload_paths.append(str(matches[0]))
+            os.environ["LD_PRELOAD"] = ":".join(
+                preload_paths + [os.environ.get("LD_PRELOAD", "")]
+            ).rstrip(":")
+            print("LD_PRELOAD =", os.environ["LD_PRELOAD"])
+
+            for lib_path in preload_paths:
+                ctypes.CDLL(lib_path, mode=ctypes.RTLD_GLOBAL)
+            print("cuDNN8 preload in notebook kernel ok")
+
+            cudnn_smoke_code = (
+                "import ctypes, os\\n"
+                "print('LD_LIBRARY_PATH =', os.environ.get('LD_LIBRARY_PATH', ''))\\n"
+                "print('LD_PRELOAD =', os.environ.get('LD_PRELOAD', ''))\\n"
+                "ctypes.CDLL('libcudnn.so.8')\\n"
+                "ctypes.CDLL('libcudnn_ops_infer.so.8')\\n"
+                "print('cuDNN8 subprocess load ok')\\n"
+            )
+            run_logged(
+                ["python", "-c", cudnn_smoke_code],
+                "17a_cudnn_smoke.log",
+                cwd="/kaggle/working/sommelier/podcast-pipeline",
+                env=os.environ.copy(),
+                tail=40,
+            )
             """
         ),
         md("## 3. Kiểm tra môi trường"),

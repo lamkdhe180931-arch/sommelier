@@ -28,6 +28,9 @@ class KaggleMainHtmlNotebookSetupTests(unittest.TestCase):
         self.assertIn('"nvidia-cudnn-cu12==8.9.7.29"', install_cell)
         self.assertIn("libcudnn_ops_infer.so.8", install_cell)
         self.assertIn('os.environ["LD_LIBRARY_PATH"]', install_cell)
+        self.assertIn('os.environ["LD_PRELOAD"]', install_cell)
+        self.assertIn("ctypes.CDLL", install_cell)
+        self.assertIn("17a_cudnn_smoke.log", install_cell)
         self.assertIn("from chunkformer import ChunkFormerModel", install_cell)
 
     def test_notebook_main_pipeline_passes_runtime_environment(self):
@@ -47,6 +50,9 @@ class KaggleMainHtmlNotebookSetupTests(unittest.TestCase):
             '"nvidia-cudnn-cu12==8.9.7.29"',
             "libcudnn_ops_infer.so.8",
             'os.environ["LD_LIBRARY_PATH"]',
+            'os.environ["LD_PRELOAD"]',
+            "ctypes.CDLL",
+            "17a_cudnn_smoke.log",
             "from chunkformer import ChunkFormerModel",
             "env = os.environ.copy()",
             "env=env",
