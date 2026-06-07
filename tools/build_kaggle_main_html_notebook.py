@@ -365,9 +365,8 @@ def main() -> None:
         md("## 2. Cài dependencies"),
         code(
             """
-            import ctypes
+            import importlib
             import os
-            import shutil
             from pathlib import Path
 
             os.chdir("/kaggle/working/sommelier/podcast-pipeline")
@@ -378,7 +377,11 @@ def main() -> None:
                 run_logged(["python", "-m", "pip", "install", "-U", "pip", "setuptools", "wheel", "packaging", "ninja"], "04_pip_base.log", tail=12)
 
                 req = Path("requirements.txt").read_text(encoding="utf-8")
-                filtered = [line for line in req.splitlines() if "nemo-toolkit[all]" not in line]
+                filtered = [
+                    line for line in req.splitlines()
+                    if "nemo-toolkit[all]" not in line
+                    and not line.startswith("ctranslate2==")
+                ]
                 Path("requirements-kaggle.txt").write_text("\\n".join(filtered) + "\\n", encoding="utf-8")
                 run_logged(["python", "-m", "pip", "install", "-r", "requirements-kaggle.txt"], "05_pip_requirements.log", tail=20)
 
@@ -406,23 +409,39 @@ def main() -> None:
                     "colorama==0.4.6",
                 ], "13a_pip_colorama.log", tail=8)
                 run_logged([
+                    "python", "-m", "pip", "install", "--no-cache-dir", "--force-reinstall", "--no-deps",
+                    "ctranslate2==4.6.3",
+                ], "13b_pip_ctranslate2.log", tail=20)
+                run_logged([
                     "python", "-m", "pip", "install", "--no-cache-dir", "--no-deps",
                     "chunkformer==1.2.2",
                 ], "13_pip_chunkformer.log", tail=30)
-
-                cudnn_dir = Path("/kaggle/working/cudnn8")
-                if cudnn_dir.exists():
-                    shutil.rmtree(cudnn_dir)
-                run_logged([
-                    "python", "-m", "pip", "install",
-                    "--no-cache-dir", "--upgrade", "--force-reinstall", "--ignore-installed",
-                    "--target", str(cudnn_dir),
-                    "nvidia-cudnn-cu12==8.9.7.29",
-                ], "17_pip_cudnn8.log", cwd="/kaggle/working/sommelier/podcast-pipeline", tail=30)
             else:
                 print("INSTALL_DEPENDENCIES=False, bỏ qua cài dependencies.")
 
-            def _existing_dirs(paths):
+            def configure_cuda_library_paths():
+                module_names = [
+                    "nvidia.cublas.lib",
+                    "nvidia.cuda_runtime.lib",
+                    "nvidia.cuda_nvrtc.lib",
+                    "nvidia.cudnn.lib",
+                    "nvidia.cufft.lib",
+                    "nvidia.curand.lib",
+                    "nvidia.cusolver.lib",
+                    "nvidia.cusparse.lib",
+                    "nvidia.nccl.lib",
+                ]
+                paths = []
+                for module_name in module_names:
+                    try:
+                        module = importlib.import_module(module_name)
+                        paths.append(Path(module.__file__).parent)
+                    except Exception as exc:
+                        print(f"Skip CUDA lib path {module_name}: {exc}")
+                paths.extend([
+                    Path("/usr/local/nvidia/lib64"),
+                    Path("/usr/local/cuda/lib64"),
+                ])
                 seen = set()
                 result = []
                 for path in paths:
@@ -430,58 +449,33 @@ def main() -> None:
                     if path and path not in seen and Path(path).exists():
                         seen.add(path)
                         result.append(path)
+                os.environ["LD_LIBRARY_PATH"] = ":".join(
+                    result + [os.environ.get("LD_LIBRARY_PATH", "")]
+                ).rstrip(":")
+                os.environ.pop("LD_PRELOAD", None)
+                print("LD_LIBRARY_PATH =", os.environ["LD_LIBRARY_PATH"])
+                print("LD_PRELOAD cleared for CTranslate2 4.6.3")
                 return result
 
-            cudnn_dir = Path("/kaggle/working/cudnn8")
-            extra_ld_paths = _existing_dirs(
-                [
-                    cudnn_dir / "nvidia" / "cudnn" / "lib",
-                    cudnn_dir / "nvidia" / "cublas" / "lib",
-                    cudnn_dir / "nvidia" / "cuda_nvrtc" / "lib",
-                    *cudnn_dir.glob("nvidia/*/lib"),
-                ]
-            )
-            os.environ["LD_LIBRARY_PATH"] = ":".join(
-                extra_ld_paths + [os.environ.get("LD_LIBRARY_PATH", "")]
-            ).rstrip(":")
-            print("LD_LIBRARY_PATH =", os.environ["LD_LIBRARY_PATH"])
+            configure_cuda_library_paths()
 
             from chunkformer import ChunkFormerModel
             print("chunkformer import ok:", ChunkFormerModel)
 
-            cudnn_matches = sorted(Path("/kaggle/working/cudnn8").rglob("libcudnn_ops_infer.so.8"))
-            print("libcudnn_ops_infer.so.8 matches:", len(cudnn_matches))
-            for path in cudnn_matches[:5]:
-                print(path)
-            if not cudnn_matches:
-                raise RuntimeError("Không tìm thấy libcudnn_ops_infer.so.8 sau khi cài cuDNN8.")
-
-            preload_names = ["libcudnn.so.8", "libcudnn_ops_infer.so.8"]
-            preload_paths = []
-            for name in preload_names:
-                matches = sorted(cudnn_dir.rglob(name))
-                if matches:
-                    preload_paths.append(str(matches[0]))
-            os.environ["LD_PRELOAD"] = ":".join(
-                preload_paths + [os.environ.get("LD_PRELOAD", "")]
-            ).rstrip(":")
-            print("LD_PRELOAD =", os.environ["LD_PRELOAD"])
-
-            for lib_path in preload_paths:
-                ctypes.CDLL(lib_path, mode=ctypes.RTLD_GLOBAL)
-            print("cuDNN8 preload in notebook kernel ok")
-
-            cudnn_smoke_code = (
-                "import ctypes, os\\n"
+            ctranslate2_smoke_code = (
+                "import ctranslate2, faster_whisper, os\\n"
+                "print('ctranslate2 =', ctranslate2.__version__)\\n"
+                "if ctranslate2.__version__ != '4.6.3':\\n"
+                "    raise RuntimeError(f'Expected ctranslate2 4.6.3, got {ctranslate2.__version__}')\\n"
+                "print('faster_whisper =', getattr(faster_whisper, '__version__', '<unknown>'))\\n"
                 "print('LD_LIBRARY_PATH =', os.environ.get('LD_LIBRARY_PATH', ''))\\n"
                 "print('LD_PRELOAD =', os.environ.get('LD_PRELOAD', ''))\\n"
-                "ctypes.CDLL('libcudnn.so.8')\\n"
-                "ctypes.CDLL('libcudnn_ops_infer.so.8')\\n"
-                "print('cuDNN8 subprocess load ok')\\n"
+                "print('cuda compute types =', ctranslate2.get_supported_compute_types('cuda'))\\n"
+                "print('CTranslate2 CUDA smoke ok')\\n"
             )
             run_logged(
-                ["python", "-c", cudnn_smoke_code],
-                "17a_cudnn_smoke.log",
+                ["python", "-c", ctranslate2_smoke_code],
+                "13c_ctranslate2_cuda_smoke.log",
                 cwd="/kaggle/working/sommelier/podcast-pipeline",
                 env=os.environ.copy(),
                 tail=40,
@@ -494,7 +488,7 @@ def main() -> None:
             import importlib.metadata as importlib_metadata
             import numpy, numba, torch, torchvision, torchaudio
 
-            for pkg in ["nemo-toolkit", "chunkformer", "transformers", "numpy", "numba", "torch", "torchvision", "torchaudio"]:
+            for pkg in ["nemo-toolkit", "chunkformer", "ctranslate2", "faster-whisper", "transformers", "numpy", "numba", "torch", "torchvision", "torchaudio"]:
                 try:
                     if pkg == "numpy":
                         version = numpy.__version__
@@ -664,10 +658,96 @@ def main() -> None:
         md("## 7. Chạy pipeline gốc một lần cho toàn bộ batch"),
         code(
             """
+            import importlib
             import os
+            import subprocess
+            from pathlib import Path
 
             LOG_DIR = Path(SETUP_LOG_DIR_PATH)
             os.chdir("/kaggle/working/sommelier/podcast-pipeline")
+
+            def configure_cuda_library_paths():
+                module_names = [
+                    "nvidia.cublas.lib",
+                    "nvidia.cuda_runtime.lib",
+                    "nvidia.cuda_nvrtc.lib",
+                    "nvidia.cudnn.lib",
+                    "nvidia.cufft.lib",
+                    "nvidia.curand.lib",
+                    "nvidia.cusolver.lib",
+                    "nvidia.cusparse.lib",
+                    "nvidia.nccl.lib",
+                ]
+                paths = []
+                for module_name in module_names:
+                    try:
+                        module = importlib.import_module(module_name)
+                        paths.append(Path(module.__file__).parent)
+                    except Exception as exc:
+                        print(f"Skip CUDA lib path {module_name}: {exc}")
+                paths.extend([
+                    Path("/usr/local/nvidia/lib64"),
+                    Path("/usr/local/cuda/lib64"),
+                ])
+                seen = set()
+                result = []
+                for path in paths:
+                    path = str(path)
+                    if path and path not in seen and Path(path).exists():
+                        seen.add(path)
+                        result.append(path)
+                os.environ["LD_LIBRARY_PATH"] = ":".join(
+                    result + [os.environ.get("LD_LIBRARY_PATH", "")]
+                ).rstrip(":")
+                os.environ.pop("LD_PRELOAD", None)
+                print("LD_LIBRARY_PATH =", os.environ["LD_LIBRARY_PATH"])
+                print("LD_PRELOAD cleared for CTranslate2 4.6.3")
+                return result
+
+            def ensure_ctranslate2_runtime():
+                configure_cuda_library_paths()
+                version_check_code = (
+                    "import ctranslate2\\n"
+                    "print('ctranslate2 =', ctranslate2.__version__)\\n"
+                    "raise SystemExit(0 if ctranslate2.__version__ == '4.6.3' else 1)\\n"
+                )
+                try:
+                    run_logged(
+                        ["python", "-c", version_check_code],
+                        "17b_ctranslate2_version_check.log",
+                        cwd="/kaggle/working/sommelier/podcast-pipeline",
+                        env=os.environ.copy(),
+                        tail=20,
+                    )
+                except subprocess.CalledProcessError:
+                    run_logged([
+                        "python", "-m", "pip", "install",
+                        "--no-cache-dir", "--force-reinstall", "--no-deps",
+                        "ctranslate2==4.6.3",
+                    ], "17b_pip_ctranslate2_repair.log", cwd="/kaggle/working/sommelier/podcast-pipeline", tail=30)
+                    configure_cuda_library_paths()
+
+                smoke_code = (
+                    "import ctranslate2, faster_whisper, os\\n"
+                    "print('ctranslate2 =', ctranslate2.__version__)\\n"
+                    "if ctranslate2.__version__ != '4.6.3':\\n"
+                    "    raise RuntimeError(f'Expected ctranslate2 4.6.3, got {ctranslate2.__version__}')\\n"
+                    "print('faster_whisper =', getattr(faster_whisper, '__version__', '<unknown>'))\\n"
+                    "print('LD_LIBRARY_PATH =', os.environ.get('LD_LIBRARY_PATH', ''))\\n"
+                    "print('LD_PRELOAD =', os.environ.get('LD_PRELOAD', ''))\\n"
+                    "print('cuda compute types =', ctranslate2.get_supported_compute_types('cuda'))\\n"
+                    "print('CTranslate2 before main pipeline ok')\\n"
+                )
+                run_logged(
+                    ["python", "-c", smoke_code],
+                    "17b_ctranslate2_before_main.log",
+                    cwd="/kaggle/working/sommelier/podcast-pipeline",
+                    env=os.environ.copy(),
+                    tail=40,
+                )
+                print("CTranslate2 runtime ready for main pipeline")
+
+            ensure_ctranslate2_runtime()
 
             cmd = [
                 "python", "main_original_ASR_MoE.py",
